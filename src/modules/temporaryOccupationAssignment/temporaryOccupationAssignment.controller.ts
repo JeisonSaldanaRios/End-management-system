@@ -29,6 +29,7 @@ import {
   ApiOkResponseList,
   ApiOkResponseMessage,
 } from '../../common/swagger/api-response.decorator';
+import { parsePositiveInt } from '../../common/validation/request-validation.util';
 
 
 import { TemporaryOccupationAssignmentService } from './temporaryOccupationAssignment.service';
@@ -73,8 +74,7 @@ export class TemporaryOccupationAssignmentController {
   async getById(@Param('id') id: string) {
     if (!id) throw new BadRequestException('Invalid ID');
 
-    const parsedId = Number.parseInt(id, 10);
-    if (Number.isNaN(parsedId)) throw new BadRequestException('Invalid ID');
+    const parsedId = parsePositiveInt(id, 'Invalid ID');
 
     const assignment = await this.service.getAssignmentById(parsedId);
     if (!assignment) throw new NotFoundException('Temporary occupation assignment not found');
@@ -104,39 +104,26 @@ export class TemporaryOccupationAssignmentController {
       } = {};
 
       if (personId) {
-        const parsedPersonId = Number.parseInt(personId, 10);
-        if (Number.isNaN(parsedPersonId)) throw new BadRequestException('Invalid personId');
+        const parsedPersonId = parsePositiveInt(personId, 'Invalid personId');
         filters.personId = parsedPersonId;
       }
 
       if (temporaryOccupationId) {
-        const parsedTemporaryOccupationId = Number.parseInt(temporaryOccupationId, 10);
-        if (Number.isNaN(parsedTemporaryOccupationId)) {
-          throw new BadRequestException('Invalid temporaryOccupationId');
-        }
+        const parsedTemporaryOccupationId = parsePositiveInt(temporaryOccupationId, 'Invalid temporaryOccupationId');
         filters.temporaryOccupationId = parsedTemporaryOccupationId;
       }
 
       if (assignedBy) {
-        const parsedAssignedBy = Number.parseInt(assignedBy, 10);
-        if (Number.isNaN(parsedAssignedBy)) throw new BadRequestException('Invalid assignedBy');
+        const parsedAssignedBy = parsePositiveInt(assignedBy, 'Invalid assignedBy');
         filters.assignedBy = parsedAssignedBy;
       }
 
       if (page) {
-        const parsedPage = Number.parseInt(page, 10);
-        if (Number.isNaN(parsedPage) || parsedPage < 1) {
-          throw new BadRequestException('Invalid page');
-        }
-        filters.page = parsedPage;
+        filters.page = parsePositiveInt(page, 'Invalid page');
       }
 
       if (limit) {
-        const parsedLimit = Number.parseInt(limit, 10);
-        if (Number.isNaN(parsedLimit) || parsedLimit < 1) {
-          throw new BadRequestException('Invalid limit');
-        }
-        filters.limit = parsedLimit;
+        filters.limit = parsePositiveInt(limit, 'Invalid limit');
       }
 
       const result = await this.service.getAllAssignments(filters);
@@ -171,8 +158,7 @@ export class TemporaryOccupationAssignmentController {
   async update(@Param('id') id: string, @Body() body: UpdateTemporaryOccupationAssignmentDTO) {
     if (!id) throw new BadRequestException('Invalid ID');
 
-    const parsedId = Number.parseInt(id, 10);
-    if (Number.isNaN(parsedId)) throw new BadRequestException('Invalid ID');
+    const parsedId = parsePositiveInt(id, 'Invalid ID');
 
     try {
       const assignment = await this.service.updateAssignment(parsedId, body);
@@ -202,8 +188,7 @@ export class TemporaryOccupationAssignmentController {
   async delete(@Param('id') id: string) {
     if (!id) throw new BadRequestException('Invalid ID');
 
-    const parsedId = Number.parseInt(id, 10);
-    if (Number.isNaN(parsedId)) throw new BadRequestException('Invalid ID');
+    const parsedId = parsePositiveInt(id, 'Invalid ID');
 
     try {
       const deleted = await this.service.deleteAssignment(parsedId);

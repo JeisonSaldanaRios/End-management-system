@@ -21,6 +21,7 @@ import {
   ApiOkResponseList,
   ApiOkResponseMessage,
 } from '../../common/swagger/api-response.decorator';
+import { parsePositiveInt } from '../../common/validation/request-validation.util';
 
 
 import { AiAdmissionReportService } from './aiAdmissionReport.service';
@@ -64,8 +65,7 @@ export class AiAdmissionReportController {
   async getById(@Param('id') id: string) {
     if (!id) throw new BadRequestException('Invalid ID');
 
-    const parsedId = Number.parseInt(id, 10);
-    if (Number.isNaN(parsedId)) throw new BadRequestException('Invalid ID');
+    const parsedId = parsePositiveInt(id, 'Invalid ID');
 
     const report = await this.service.getReportById(parsedId);
     if (!report) throw new NotFoundException('AI admission report not found');
@@ -95,8 +95,7 @@ export class AiAdmissionReportController {
       } = {};
 
       if (requestId) {
-        const parsedRequestId = Number.parseInt(requestId, 10);
-        if (Number.isNaN(parsedRequestId)) throw new BadRequestException('Invalid requestId');
+        const parsedRequestId = parsePositiveInt(requestId, 'Invalid requestId');
         filters.requestId = parsedRequestId;
       }
 
@@ -105,27 +104,16 @@ export class AiAdmissionReportController {
       }
 
       if (suggestedOccupationId) {
-        const parsedSuggestedOccupationId = Number.parseInt(suggestedOccupationId, 10);
-        if (Number.isNaN(parsedSuggestedOccupationId)) {
-          throw new BadRequestException('Invalid suggestedOccupationId');
-        }
+        const parsedSuggestedOccupationId = parsePositiveInt(suggestedOccupationId, 'Invalid suggestedOccupationId');
         filters.suggestedOccupationId = parsedSuggestedOccupationId;
       }
 
       if (page) {
-        const parsedPage = Number.parseInt(page, 10);
-        if (Number.isNaN(parsedPage) || parsedPage < 1) {
-          throw new BadRequestException('Invalid page');
-        }
-        filters.page = parsedPage;
+        filters.page = parsePositiveInt(page, 'Invalid page');
       }
 
       if (limit) {
-        const parsedLimit = Number.parseInt(limit, 10);
-        if (Number.isNaN(parsedLimit) || parsedLimit < 1) {
-          throw new BadRequestException('Invalid limit');
-        }
-        filters.limit = parsedLimit;
+        filters.limit = parsePositiveInt(limit, 'Invalid limit');
       }
 
       const result = await this.service.getAllReports(filters);
@@ -158,8 +146,7 @@ export class AiAdmissionReportController {
   async update(@Param('id') id: string, @Body() body: UpdateAiAdmissionReportDTO) {
     if (!id) throw new BadRequestException('Invalid ID');
 
-    const parsedId = Number.parseInt(id, 10);
-    if (Number.isNaN(parsedId)) throw new BadRequestException('Invalid ID');
+    const parsedId = parsePositiveInt(id, 'Invalid ID');
 
     try {
       const report = await this.service.updateReport(parsedId, body);
@@ -185,8 +172,7 @@ export class AiAdmissionReportController {
   async delete(@Param('id') id: string) {
     if (!id) throw new BadRequestException('Invalid ID');
 
-    const parsedId = Number.parseInt(id, 10);
-    if (Number.isNaN(parsedId)) throw new BadRequestException('Invalid ID');
+    const parsedId = parsePositiveInt(id, 'Invalid ID');
 
     try {
       const deleted = await this.service.deleteReport(parsedId);

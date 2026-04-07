@@ -24,6 +24,7 @@ import {
   ApiOkResponseData,
   ApiOkResponseList,
 } from '../../common/swagger/api-response.decorator';
+import { parsePositiveInt } from '../../common/validation/request-validation.util';
 
 import { DecisionTreeService } from './decisionTree.service';
 import type {
@@ -122,10 +123,7 @@ export class DecisionTreeController {
   @ApiBadRequestResponse({ description: 'Invalid id' })
   @ApiNotFoundResponse({ description: 'Decision tree model not found' })
   async getModelById(@Param('id') id: string) {
-    const parsedId = Number.parseInt(id, 10);
-    if (Number.isNaN(parsedId)) {
-      throw new BadRequestException('Invalid ID');
-    }
+    const parsedId = parsePositiveInt(id, 'Invalid ID');
 
     const model = await this.service.getModelById(parsedId);
     if (!model) {
@@ -161,16 +159,8 @@ export class DecisionTreeController {
     @Query('page') page?: string,
     @Query('limit') limit?: string,
   ) {
-    const parsedPage = page ? Number.parseInt(page, 10) : 1;
-    const parsedLimit = limit ? Number.parseInt(limit, 10) : 10;
-
-    if (Number.isNaN(parsedPage) || parsedPage < 1) {
-      throw new BadRequestException('Invalid page');
-    }
-
-    if (Number.isNaN(parsedLimit) || parsedLimit < 1) {
-      throw new BadRequestException('Invalid limit');
-    }
+    const parsedPage = page ? parsePositiveInt(page, 'Invalid page') : 1;
+    const parsedLimit = limit ? parsePositiveInt(limit, 'Invalid limit') : 10;
 
     let parsedIsActive: boolean | undefined;
     if (isActive !== undefined) {

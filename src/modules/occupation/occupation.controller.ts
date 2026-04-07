@@ -9,8 +9,15 @@ import {
   Post,
   Put,
   Query,
-  Req,
 } from '@nestjs/common';
+
+import {
+  assertNonEmptyPayload,
+  COMMON_MAX_LENGTH,
+  parseBooleanQuery,
+  parsePositiveInt,
+  validateStringFieldsMaxLength,
+} from '../../common/validation/request-validation.util';
 
 
 import { ApiBadRequestResponse, ApiBody, ApiNotFoundResponse, ApiOperation, ApiParam, ApiQuery, ApiTags } from '@nestjs/swagger';
@@ -38,6 +45,13 @@ export class OccupationController {
   @ApiCreatedResponseData(OccupationEntity, { description: 'Occupation created' })
   @ApiBadRequestResponse({ description: 'Invalid payload' })
   async create(@Body() body: CreateOccupationDTO) {
+    validateStringFieldsMaxLength([
+      { fieldName: 'name', value: body.name, maxLength: COMMON_MAX_LENGTH.name, required: true },
+      { fieldName: 'description', value: body.description, maxLength: COMMON_MAX_LENGTH.longText, allowNull: true },
+      { fieldName: 'dailyAmountProduced', value: body.dailyAmountProduced, maxLength: COMMON_MAX_LENGTH.numericText },
+      { fieldName: 'dailyRationConsumed', value: body.dailyRationConsumed, maxLength: COMMON_MAX_LENGTH.numericText },
+    ]);
+
     try {
       const occupation = await this.service.createOccupation(body);
       return {
@@ -60,8 +74,7 @@ export class OccupationController {
   async getById(@Param('id') id: string) {
     if (!id) throw new BadRequestException('Invalid ID');
 
-    const parsedId = Number.parseInt(id, 10);
-    if (Number.isNaN(parsedId)) throw new BadRequestException('Invalid ID');
+    const parsedId = parsePositiveInt(id, 'Invalid ID');
 
     const occupation = await this.service.getOccupationById(parsedId);
     if (!occupation) throw new NotFoundException('Occupation not found');
@@ -91,41 +104,23 @@ export class OccupationController {
       } = {};
 
       if (collectsResources !== undefined) {
-        if (collectsResources !== 'true' && collectsResources !== 'false') {
-          throw new BadRequestException('Invalid collectsResources');
-        }
-        filters.collectsResources = collectsResources === 'true';
+        filters.collectsResources = parseBooleanQuery(collectsResources, 'Invalid collectsResources');
       }
 
       if (participatesInExpeditions !== undefined) {
-        if (participatesInExpeditions !== 'true' && participatesInExpeditions !== 'false') {
-          throw new BadRequestException('Invalid participatesInExpeditions');
-        }
-        filters.participatesInExpeditions = participatesInExpeditions === 'true';
+        filters.participatesInExpeditions = parseBooleanQuery(participatesInExpeditions, 'Invalid participatesInExpeditions');
       }
 
       if (resourceTypeId) {
-        const parsedResourceTypeId = Number.parseInt(resourceTypeId, 10);
-        if (Number.isNaN(parsedResourceTypeId)) {
-          throw new BadRequestException('Invalid resourceTypeId');
-        }
-        filters.resourceTypeId = parsedResourceTypeId;
+        filters.resourceTypeId = parsePositiveInt(resourceTypeId, 'Invalid resourceTypeId');
       }
 
       if (page) {
-        const parsedPage = Number.parseInt(page, 10);
-        if (Number.isNaN(parsedPage) || parsedPage < 1) {
-          throw new BadRequestException('Invalid page');
-        }
-        filters.page = parsedPage;
+        filters.page = parsePositiveInt(page, 'Invalid page');
       }
 
       if (limit) {
-        const parsedLimit = Number.parseInt(limit, 10);
-        if (Number.isNaN(parsedLimit) || parsedLimit < 1) {
-          throw new BadRequestException('Invalid limit');
-        }
-        filters.limit = parsedLimit;
+        filters.limit = parsePositiveInt(limit, 'Invalid limit');
       }
 
       const result = await this.service.getAllOccupations(filters);
@@ -158,8 +153,16 @@ export class OccupationController {
   async update(@Param('id') id: string, @Body() body: UpdateOccupationDTO) {
     if (!id) throw new BadRequestException('Invalid ID');
 
-    const parsedId = Number.parseInt(id, 10);
-    if (Number.isNaN(parsedId)) throw new BadRequestException('Invalid ID');
+    const parsedId = parsePositiveInt(id, 'Invalid ID');
+
+    assertNonEmptyPayload(body);
+
+    validateStringFieldsMaxLength([
+      { fieldName: 'name', value: body.name, maxLength: COMMON_MAX_LENGTH.name },
+      { fieldName: 'description', value: body.description, maxLength: COMMON_MAX_LENGTH.longText, allowNull: true },
+      { fieldName: 'dailyAmountProduced', value: body.dailyAmountProduced, maxLength: COMMON_MAX_LENGTH.numericText },
+      { fieldName: 'dailyRationConsumed', value: body.dailyRationConsumed, maxLength: COMMON_MAX_LENGTH.numericText },
+    ]);
 
     try {
       const occupation = await this.service.updateOccupation(parsedId, body);
@@ -185,8 +188,7 @@ export class OccupationController {
   async delete(@Param('id') id: string) {
     if (!id) throw new BadRequestException('Invalid ID');
 
-    const parsedId = Number.parseInt(id, 10);
-    if (Number.isNaN(parsedId)) throw new BadRequestException('Invalid ID');
+    const parsedId = parsePositiveInt(id, 'Invalid ID');
 
     try {
       const deleted = await this.service.deleteOccupation(parsedId);

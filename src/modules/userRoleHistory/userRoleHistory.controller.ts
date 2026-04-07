@@ -30,6 +30,7 @@ import {
   ApiOkResponseList,
   ApiOkResponseMessage,
 } from '../../common/swagger/api-response.decorator';
+import { parsePositiveInt } from '../../common/validation/request-validation.util';
 
 
 import { UserRoleHistoryService } from './userRoleHistory.service';
@@ -76,8 +77,7 @@ export class UserRoleHistoryController {
   async getById(@Param('id') id: string) {
     if (!id) throw new BadRequestException('Invalid ID');
 
-    const parsedId = Number.parseInt(id, 10);
-    if (Number.isNaN(parsedId)) throw new BadRequestException('Invalid ID');
+    const parsedId = parsePositiveInt(id, 'Invalid ID');
 
     const entry = await this.service.getEntryById(parsedId);
     if (!entry) throw new NotFoundException('User role history entry not found');
@@ -105,31 +105,21 @@ export class UserRoleHistoryController {
       } = {};
 
       if (userId) {
-        const parsedUserId = Number.parseInt(userId, 10);
-        if (Number.isNaN(parsedUserId)) throw new BadRequestException('Invalid userId');
+        const parsedUserId = parsePositiveInt(userId, 'Invalid userId');
         filters.userId = parsedUserId;
       }
 
       if (changedBy) {
-        const parsedChangedBy = Number.parseInt(changedBy, 10);
-        if (Number.isNaN(parsedChangedBy)) throw new BadRequestException('Invalid changedBy');
+        const parsedChangedBy = parsePositiveInt(changedBy, 'Invalid changedBy');
         filters.changedBy = parsedChangedBy;
       }
 
       if (page) {
-        const parsedPage = Number.parseInt(page, 10);
-        if (Number.isNaN(parsedPage) || parsedPage < 1) {
-          throw new BadRequestException('Invalid page');
-        }
-        filters.page = parsedPage;
+        filters.page = parsePositiveInt(page, 'Invalid page');
       }
 
       if (limit) {
-        const parsedLimit = Number.parseInt(limit, 10);
-        if (Number.isNaN(parsedLimit) || parsedLimit < 1) {
-          throw new BadRequestException('Invalid limit');
-        }
-        filters.limit = parsedLimit;
+        filters.limit = parsePositiveInt(limit, 'Invalid limit');
       }
 
       const result = await this.service.getAllEntries(filters);
@@ -162,8 +152,7 @@ export class UserRoleHistoryController {
   async update(@Param('id') id: string, @Body() body: UpdateUserRoleHistoryDTO) {
     if (!id) throw new BadRequestException('Invalid ID');
 
-    const parsedId = Number.parseInt(id, 10);
-    if (Number.isNaN(parsedId)) throw new BadRequestException('Invalid ID');
+    const parsedId = parsePositiveInt(id, 'Invalid ID');
 
     try {
       const entry = await this.service.updateEntry(parsedId, body);
@@ -193,8 +182,7 @@ export class UserRoleHistoryController {
   async delete(@Param('id') id: string) {
     if (!id) throw new BadRequestException('Invalid ID');
 
-    const parsedId = Number.parseInt(id, 10);
-    if (Number.isNaN(parsedId)) throw new BadRequestException('Invalid ID');
+    const parsedId = parsePositiveInt(id, 'Invalid ID');
 
     try {
       const deleted = await this.service.deleteEntry(parsedId);

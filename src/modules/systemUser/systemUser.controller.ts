@@ -13,6 +13,14 @@ import {
 } from '@nestjs/common';
 
 import {
+  assertEnumValue,
+  assertNonEmptyPayload,
+  COMMON_MAX_LENGTH,
+  parsePositiveInt,
+  validateStringFieldsMaxLength,
+} from '../../common/validation/request-validation.util';
+
+import {
   ApiBadRequestResponse,
   ApiBody,
   ApiInternalServerErrorResponse,
@@ -32,6 +40,7 @@ import {
 
 import { UserService } from './systemUser.service';
 import type { CreateUserDTO, LoginDTO } from './systemUser.model';
+import { SYSTEM_ROLE_VALUES } from './systemUser.model';
 
 import {
   CreateSystemUserDto,
@@ -52,6 +61,16 @@ export class UserController {
   @ApiBadRequestResponse({ description: 'Invalid payload' })
   @ApiInternalServerErrorResponse({ description: 'Unexpected error' })
   async create(@Body() body: CreateUserDTO) {
+    validateStringFieldsMaxLength([
+      { fieldName: 'username', value: body.username, maxLength: COMMON_MAX_LENGTH.username, required: true },
+      { fieldName: 'password', value: body.password, maxLength: COMMON_MAX_LENGTH.mediumText, required: true },
+      { fieldName: 'email', value: body.email, maxLength: COMMON_MAX_LENGTH.email, required: true },
+    ]);
+
+    if (body.role) {
+      assertEnumValue(body.role, SYSTEM_ROLE_VALUES, 'Invalid role');
+    }
+
     try {
       const user = await this.service.createUser(body);
       return {
@@ -86,8 +105,7 @@ export class UserController {
   async findById(@Param('id') id: string) {
     if (!id) throw new BadRequestException('ID not provided');
 
-    const parsedId = Number.parseInt(id, 10);
-    if (Number.isNaN(parsedId)) throw new BadRequestException('invalid ID');
+    const parsedId = parsePositiveInt(id, 'invalid ID');
 
     const user = await this.service.findUserById(parsedId);
     if (!user) throw new NotFoundException('User not found');
@@ -106,8 +124,18 @@ export class UserController {
   async update(@Param('id') id: string, @Body() body: UpdateSystemUserDto) {
     if (!id) throw new BadRequestException('ID not provided');
 
-    const parsedId = Number.parseInt(id, 10);
-    if (Number.isNaN(parsedId)) throw new BadRequestException('invalid ID');
+    const parsedId = parsePositiveInt(id, 'invalid ID');
+
+    assertNonEmptyPayload(body);
+
+    validateStringFieldsMaxLength([
+      { fieldName: 'username', value: body.username, maxLength: COMMON_MAX_LENGTH.username },
+      { fieldName: 'email', value: body.email, maxLength: COMMON_MAX_LENGTH.email },
+    ]);
+
+    if (body.role) {
+      assertEnumValue(body.role, SYSTEM_ROLE_VALUES, 'Invalid role');
+    }
 
     try {
       const user = await this.service.updateUser(parsedId, body);
@@ -132,8 +160,7 @@ export class UserController {
   async delete(@Param('id') id: string) {
     if (!id) throw new BadRequestException('ID not provided');
 
-    const parsedId = Number.parseInt(id, 10);
-    if (Number.isNaN(parsedId)) throw new BadRequestException('invalid ID');
+    const parsedId = parsePositiveInt(id, 'invalid ID');
 
     const deleted = await this.service.deleteUser(parsedId);
     if (!deleted) throw new NotFoundException('User not found');
@@ -149,6 +176,11 @@ export class UserController {
   @ApiUnauthorizedResponse({ description: 'Invalid credentials' })
   @ApiInternalServerErrorResponse({ description: 'Unexpected error' })
   async login(@Body() body: LoginDTO) {
+    validateStringFieldsMaxLength([
+      { fieldName: 'username', value: body.username, maxLength: COMMON_MAX_LENGTH.username, required: true },
+      { fieldName: 'password', value: body.password, maxLength: COMMON_MAX_LENGTH.mediumText, required: true },
+    ]);
+
     try {
       const user = await this.service.login(body);
       if (!user) throw new UnauthorizedException('Invalid credentials');

@@ -12,6 +12,14 @@ import {
   Query,
 } from '@nestjs/common';
 
+import {
+  assertEnumValue,
+  assertNonEmptyPayload,
+  COMMON_MAX_LENGTH,
+  parsePositiveInt,
+  validateStringFieldsMaxLength,
+} from '../../common/validation/request-validation.util';
+
 
 import { ApiBadRequestResponse, ApiBody, ApiNotFoundResponse, ApiOperation, ApiParam, ApiQuery, ApiTags } from '@nestjs/swagger';
 
@@ -28,6 +36,7 @@ import type {
   CreateAccessLogDTO,
   UpdateAccessLogDTO,
 } from './accessLog.model';
+import { ACCESS_LOG_EVENT_TYPE_VALUES } from './accessLog.model';
 import { AccessLogEntity } from './accessLog.entity';
 
 import { CreateAccessLogDto, UpdateAccessLogDto } from './dto';
@@ -41,6 +50,11 @@ export class AccessLogController {
   @ApiCreatedResponseData(AccessLogEntity, { description: 'Access Log created' })
   @ApiBadRequestResponse({ description: 'Invalid payload' })
   async create(@Body() body: CreateAccessLogDTO) {
+    validateStringFieldsMaxLength([
+      { fieldName: 'sourceIp', value: body.sourceIp, maxLength: COMMON_MAX_LENGTH.ip, allowNull: true },
+      { fieldName: 'detail', value: body.detail, maxLength: COMMON_MAX_LENGTH.longText, allowNull: true },
+    ]);
+
     try {
       const log = await this.service.createLog(body);
       return {
@@ -67,8 +81,7 @@ export class AccessLogController {
   async getById(@Param('id') id: string) {
     if (!id) throw new BadRequestException('Invalid ID');
 
-    const parsedId = Number.parseInt(id, 10);
-    if (Number.isNaN(parsedId)) throw new BadRequestException('Invalid ID');
+    const parsedId = parsePositiveInt(id, 'Invalid ID');
 
     const log = await this.service.getLogById(parsedId);
     if (!log) throw new NotFoundException('Access log not found');
@@ -100,41 +113,31 @@ export class AccessLogController {
       } = {};
 
       if (userId) {
-        const parsedUserId = Number.parseInt(userId, 10);
-        if (Number.isNaN(parsedUserId)) throw new BadRequestException('Invalid userId');
+        const parsedUserId = parsePositiveInt(userId, 'Invalid userId');
         filters.userId = parsedUserId;
       }
 
       if (campId) {
-        const parsedCampId = Number.parseInt(campId, 10);
-        if (Number.isNaN(parsedCampId)) throw new BadRequestException('Invalid campId');
+        const parsedCampId = parsePositiveInt(campId, 'Invalid campId');
         filters.campId = parsedCampId;
       }
 
       if (sessionId) {
-        const parsedSessionId = Number.parseInt(sessionId, 10);
-        if (Number.isNaN(parsedSessionId)) throw new BadRequestException('Invalid sessionId');
+        const parsedSessionId = parsePositiveInt(sessionId, 'Invalid sessionId');
         filters.sessionId = parsedSessionId;
       }
 
       if (eventType) {
+        assertEnumValue(eventType, ACCESS_LOG_EVENT_TYPE_VALUES, 'Invalid eventType');
         filters.eventType = eventType;
       }
 
       if (page) {
-        const parsedPage = Number.parseInt(page, 10);
-        if (Number.isNaN(parsedPage) || parsedPage < 1) {
-          throw new BadRequestException('Invalid page');
-        }
-        filters.page = parsedPage;
+        filters.page = parsePositiveInt(page, 'Invalid page');
       }
 
       if (limit) {
-        const parsedLimit = Number.parseInt(limit, 10);
-        if (Number.isNaN(parsedLimit) || parsedLimit < 1) {
-          throw new BadRequestException('Invalid limit');
-        }
-        filters.limit = parsedLimit;
+        filters.limit = parsePositiveInt(limit, 'Invalid limit');
       }
 
       const result = await this.service.getAllLogs(filters);
@@ -167,8 +170,14 @@ export class AccessLogController {
   async update(@Param('id') id: string, @Body() body: UpdateAccessLogDTO) {
     if (!id) throw new BadRequestException('Invalid ID');
 
-    const parsedId = Number.parseInt(id, 10);
-    if (Number.isNaN(parsedId)) throw new BadRequestException('Invalid ID');
+    const parsedId = parsePositiveInt(id, 'Invalid ID');
+
+    assertNonEmptyPayload(body);
+
+    validateStringFieldsMaxLength([
+      { fieldName: 'sourceIp', value: body.sourceIp, maxLength: COMMON_MAX_LENGTH.ip, allowNull: true },
+      { fieldName: 'detail', value: body.detail, maxLength: COMMON_MAX_LENGTH.longText, allowNull: true },
+    ]);
 
     try {
       const log = await this.service.updateLog(parsedId, body);
@@ -198,8 +207,7 @@ export class AccessLogController {
   async delete(@Param('id') id: string) {
     if (!id) throw new BadRequestException('Invalid ID');
 
-    const parsedId = Number.parseInt(id, 10);
-    if (Number.isNaN(parsedId)) throw new BadRequestException('Invalid ID');
+    const parsedId = parsePositiveInt(id, 'Invalid ID');
 
     try {
       const deleted = await this.service.deleteLog(parsedId);

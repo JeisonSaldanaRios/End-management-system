@@ -9,8 +9,15 @@ import {
   Post,
   Put,
   Query,
-  Req,
 } from '@nestjs/common';
+
+import {
+  assertEnumValue,
+  assertNonEmptyPayload,
+  COMMON_MAX_LENGTH,
+  parsePositiveInt,
+  validateStringFieldsMaxLength,
+} from '../../common/validation/request-validation.util';
 
 
 import { ApiBadRequestResponse, ApiBody, ApiNotFoundResponse, ApiOperation, ApiParam, ApiQuery, ApiTags } from '@nestjs/swagger';
@@ -24,6 +31,7 @@ import {
 
 import { CampService } from './camp.service';
 import type { CampStatus, CreateCampDTO, UpdateCampDTO } from './camp.model';
+import { CAMP_STATUS_VALUES } from './camp.model';
 import { CampEntity } from './camp.entity';
 
 import { CreateCampDto, UpdateCampDto } from './dto';
@@ -37,6 +45,19 @@ export class CampController {
   @ApiCreatedResponseData(CampEntity, { description: 'Camp created' })
   @ApiBadRequestResponse({ description: 'Invalid payload' })
   async create(@Body() body: CreateCampDTO) {
+    validateStringFieldsMaxLength([
+      { fieldName: 'name', value: body.name, maxLength: COMMON_MAX_LENGTH.name, required: true },
+      { fieldName: 'latitude', value: body.latitude, maxLength: COMMON_MAX_LENGTH.coordinate, required: true },
+      { fieldName: 'longitude', value: body.longitude, maxLength: COMMON_MAX_LENGTH.coordinate, required: true },
+      { fieldName: 'description', value: body.description, maxLength: COMMON_MAX_LENGTH.longText, allowNull: true },
+      { fieldName: 'minimumDailyRationPerPerson', value: body.minimumDailyRationPerPerson, maxLength: COMMON_MAX_LENGTH.numericText },
+      { fieldName: 'stockAlertThresholdPercentage', value: body.stockAlertThresholdPercentage, maxLength: COMMON_MAX_LENGTH.numericText },
+    ]);
+
+    if (body.status) {
+      assertEnumValue(body.status, CAMP_STATUS_VALUES, 'Invalid status');
+    }
+
     try {
       const camp = await this.service.createCamp(body);
       return {
@@ -59,8 +80,7 @@ export class CampController {
   async getById(@Param('id') id: string) {
     if (!id) throw new BadRequestException('Invalid ID');
 
-    const parsedId = Number.parseInt(id, 10);
-    if (Number.isNaN(parsedId)) throw new BadRequestException('Invalid ID');
+    const parsedId = parsePositiveInt(id, 'Invalid ID');
 
     const camp = await this.service.getCampById(parsedId);
     if (!camp) throw new NotFoundException('Camp not found');
@@ -86,23 +106,16 @@ export class CampController {
       } = {};
 
       if (status) {
+        assertEnumValue(status, CAMP_STATUS_VALUES, 'Invalid status');
         filters.status = status;
       }
 
       if (page) {
-        const parsedPage = Number.parseInt(page, 10);
-        if (Number.isNaN(parsedPage) || parsedPage < 1) {
-          throw new BadRequestException('Invalid page');
-        }
-        filters.page = parsedPage;
+        filters.page = parsePositiveInt(page, 'Invalid page');
       }
 
       if (limit) {
-        const parsedLimit = Number.parseInt(limit, 10);
-        if (Number.isNaN(parsedLimit) || parsedLimit < 1) {
-          throw new BadRequestException('Invalid limit');
-        }
-        filters.limit = parsedLimit;
+        filters.limit = parsePositiveInt(limit, 'Invalid limit');
       }
 
       const result = await this.service.getAllCamps(filters);
@@ -135,8 +148,22 @@ export class CampController {
   async update(@Param('id') id: string, @Body() body: UpdateCampDTO) {
     if (!id) throw new BadRequestException('Invalid ID');
 
-    const parsedId = Number.parseInt(id, 10);
-    if (Number.isNaN(parsedId)) throw new BadRequestException('Invalid ID');
+    const parsedId = parsePositiveInt(id, 'Invalid ID');
+
+    assertNonEmptyPayload(body);
+
+    validateStringFieldsMaxLength([
+      { fieldName: 'name', value: body.name, maxLength: COMMON_MAX_LENGTH.name },
+      { fieldName: 'latitude', value: body.latitude, maxLength: COMMON_MAX_LENGTH.coordinate },
+      { fieldName: 'longitude', value: body.longitude, maxLength: COMMON_MAX_LENGTH.coordinate },
+      { fieldName: 'description', value: body.description, maxLength: COMMON_MAX_LENGTH.longText, allowNull: true },
+      { fieldName: 'minimumDailyRationPerPerson', value: body.minimumDailyRationPerPerson, maxLength: COMMON_MAX_LENGTH.numericText },
+      { fieldName: 'stockAlertThresholdPercentage', value: body.stockAlertThresholdPercentage, maxLength: COMMON_MAX_LENGTH.numericText },
+    ]);
+
+    if (body.status) {
+      assertEnumValue(body.status, CAMP_STATUS_VALUES, 'Invalid status');
+    }
 
     try {
       const camp = await this.service.updateCamp(parsedId, body);
@@ -162,8 +189,7 @@ export class CampController {
   async delete(@Param('id') id: string) {
     if (!id) throw new BadRequestException('Invalid ID');
 
-    const parsedId = Number.parseInt(id, 10);
-    if (Number.isNaN(parsedId)) throw new BadRequestException('Invalid ID');
+    const parsedId = parsePositiveInt(id, 'Invalid ID');
 
     try {
       const deleted = await this.service.deleteCamp(parsedId);

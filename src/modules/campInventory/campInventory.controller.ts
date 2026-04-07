@@ -19,6 +19,7 @@ import {
   ApiCreatedResponseData,
   ApiOkResponseList,
 } from '../../common/swagger/api-response.decorator';
+import { parsePositiveInt } from '../../common/validation/request-validation.util';
 
 
 import { CampInventoryService } from './campInventory.service';
@@ -58,13 +59,8 @@ export class CampInventoryController {
     @Param('campId') campId: string,
     @Param('resourceTypeId') resourceTypeId: string,
   ) {
-    const parsedCampId = Number.parseInt(campId, 10);
-    if (Number.isNaN(parsedCampId)) throw new BadRequestException('Invalid campId');
-
-    const parsedResourceTypeId = Number.parseInt(resourceTypeId, 10);
-    if (Number.isNaN(parsedResourceTypeId)) {
-      throw new BadRequestException('Invalid resourceTypeId');
-    }
+    const parsedCampId = parsePositiveInt(campId, 'Invalid campId');
+    const parsedResourceTypeId = parsePositiveInt(resourceTypeId, 'Invalid resourceTypeId');
 
     const item = await this.service.getItem(parsedCampId, parsedResourceTypeId);
     if (!item) throw new NotFoundException('Camp inventory item not found');
@@ -92,33 +88,21 @@ export class CampInventoryController {
       } = {};
 
       if (campId) {
-        const parsedCampId = Number.parseInt(campId, 10);
-        if (Number.isNaN(parsedCampId)) throw new BadRequestException('Invalid camp ID');
+        const parsedCampId = parsePositiveInt(campId, 'Invalid camp ID');
         filters.campId = parsedCampId;
       }
 
       if (resourceTypeId) {
-        const parsedResourceTypeId = Number.parseInt(resourceTypeId, 10);
-        if (Number.isNaN(parsedResourceTypeId)) {
-          throw new BadRequestException('Invalid resource type ID');
-        }
+        const parsedResourceTypeId = parsePositiveInt(resourceTypeId, 'Invalid resource type ID');
         filters.resourceTypeId = parsedResourceTypeId;
       }
 
       if (page) {
-        const parsedPage = Number.parseInt(page, 10);
-        if (Number.isNaN(parsedPage) || parsedPage < 1) {
-          throw new BadRequestException('Invalid page');
-        }
-        filters.page = parsedPage;
+        filters.page = parsePositiveInt(page, 'Invalid page');
       }
 
       if (limit) {
-        const parsedLimit = Number.parseInt(limit, 10);
-        if (Number.isNaN(parsedLimit) || parsedLimit < 1) {
-          throw new BadRequestException('Invalid limit');
-        }
-        filters.limit = parsedLimit;
+        filters.limit = parsePositiveInt(limit, 'Invalid limit');
       }
 
       const result = await this.service.getAllItems(filters);
@@ -148,13 +132,8 @@ export class CampInventoryController {
     @Param('resourceTypeId') resourceTypeId: string,
     @Body() body: UpdateCampInventoryDTO,
   ) {
-    const parsedCampId = Number.parseInt(campId, 10);
-    if (Number.isNaN(parsedCampId)) throw new BadRequestException('Invalid campId');
-
-    const parsedResourceTypeId = Number.parseInt(resourceTypeId, 10);
-    if (Number.isNaN(parsedResourceTypeId)) {
-      throw new BadRequestException('Invalid resourceTypeId');
-    }
+    const parsedCampId = parsePositiveInt(campId, 'Invalid campId');
+    const parsedResourceTypeId = parsePositiveInt(resourceTypeId, 'Invalid resourceTypeId');
 
     try {
       const item = await this.service.updateItem(parsedCampId, parsedResourceTypeId, body);
@@ -177,13 +156,8 @@ export class CampInventoryController {
     @Param('campId') campId: string,
     @Param('resourceTypeId') resourceTypeId: string,
   ) {
-    const parsedCampId = Number.parseInt(campId, 10);
-    if (Number.isNaN(parsedCampId)) throw new BadRequestException('Invalid campId');
-
-    const parsedResourceTypeId = Number.parseInt(resourceTypeId, 10);
-    if (Number.isNaN(parsedResourceTypeId)) {
-      throw new BadRequestException('Invalid resourceTypeId');
-    }
+    const parsedCampId = parsePositiveInt(campId, 'Invalid campId');
+    const parsedResourceTypeId = parsePositiveInt(resourceTypeId, 'Invalid resourceTypeId');
 
     try {
       const deleted = await this.service.deleteItem(parsedCampId, parsedResourceTypeId);

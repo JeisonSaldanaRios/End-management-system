@@ -22,6 +22,7 @@ import {
   ApiOkResponseList,
   ApiOkResponseMessage,
 } from '../../common/swagger/api-response.decorator';
+import { parsePositiveInt } from '../../common/validation/request-validation.util';
 
 
 import { ExpeditionParticipantService } from './expeditionParticipant.service';
@@ -69,8 +70,7 @@ export class ExpeditionParticipantController {
   async getById(@Param('id') id: string) {
     if (!id) throw new BadRequestException('Invalid ID');
 
-    const parsedId = Number.parseInt(id, 10);
-    if (Number.isNaN(parsedId)) throw new BadRequestException('Invalid ID');
+    const parsedId = parsePositiveInt(id, 'Invalid ID');
 
     const participant = await this.service.getParticipantById(parsedId);
     if (!participant) throw new NotFoundException('Expedition participant not found');
@@ -100,16 +100,12 @@ export class ExpeditionParticipantController {
       } = {};
 
       if (expeditionId) {
-        const parsedExpeditionId = Number.parseInt(expeditionId, 10);
-        if (Number.isNaN(parsedExpeditionId)) {
-          throw new BadRequestException('Invalid expeditionId');
-        }
+        const parsedExpeditionId = parsePositiveInt(expeditionId, 'Invalid expeditionId');
         filters.expeditionId = parsedExpeditionId;
       }
 
       if (personId) {
-        const parsedPersonId = Number.parseInt(personId, 10);
-        if (Number.isNaN(parsedPersonId)) throw new BadRequestException('Invalid personId');
+        const parsedPersonId = parsePositiveInt(personId, 'Invalid personId');
         filters.personId = parsedPersonId;
       }
 
@@ -118,19 +114,11 @@ export class ExpeditionParticipantController {
       }
 
       if (page) {
-        const parsedPage = Number.parseInt(page, 10);
-        if (Number.isNaN(parsedPage) || parsedPage < 1) {
-          throw new BadRequestException('Invalid page');
-        }
-        filters.page = parsedPage;
+        filters.page = parsePositiveInt(page, 'Invalid page');
       }
 
       if (limit) {
-        const parsedLimit = Number.parseInt(limit, 10);
-        if (Number.isNaN(parsedLimit) || parsedLimit < 1) {
-          throw new BadRequestException('Invalid limit');
-        }
-        filters.limit = parsedLimit;
+        filters.limit = parsePositiveInt(limit, 'Invalid limit');
       }
 
       const result = await this.service.getAllParticipants(filters);
@@ -165,8 +153,7 @@ export class ExpeditionParticipantController {
   async update(@Param('id') id: string, @Body() body: UpdateExpeditionParticipantDTO) {
     if (!id) throw new BadRequestException('Invalid ID');
 
-    const parsedId = Number.parseInt(id, 10);
-    if (Number.isNaN(parsedId)) throw new BadRequestException('Invalid ID');
+    const parsedId = parsePositiveInt(id, 'Invalid ID');
 
     try {
       const participant = await this.service.updateParticipant(parsedId, body);
@@ -198,8 +185,7 @@ export class ExpeditionParticipantController {
   async delete(@Param('id') id: string) {
     if (!id) throw new BadRequestException('Invalid ID');
 
-    const parsedId = Number.parseInt(id, 10);
-    if (Number.isNaN(parsedId)) throw new BadRequestException('Invalid ID');
+    const parsedId = parsePositiveInt(id, 'Invalid ID');
 
     try {
       const deleted = await this.service.deleteParticipant(parsedId);

@@ -8,7 +8,6 @@ import {
   Param,
   Post,
   Put,
-  Req,
   Query,
 } from '@nestjs/common';
 import {
@@ -27,6 +26,13 @@ import {
   ApiOkResponseList,
   ApiOkResponseMessage,
 } from '../../common/swagger/api-response.decorator';
+import {
+  assertBooleanValue,
+  assertEnumValue,
+  assertNonEmptyPayload,
+  parsePositiveInt,
+  validateStringFieldsMaxLength,
+} from '../../common/validation/request-validation.util';
 
 import { AdmissionRequestService } from './admissionRequest.service';
 import { AdmissionRequestEntity } from './admissionRequest.entity';
@@ -46,12 +52,35 @@ import {
 export class AdmissionRequestController {
   constructor(private readonly service: AdmissionRequestService) {}
 
+  private readonly maxLength = {
+    name: 15,
+    lastName: 15,
+    email: 50,
+    desiredUsername: 20,
+    freeText: 200,
+    url: 2048,
+    rejectionReason: 100,
+  } as const;
+
   @Post()
   @ApiOperation({ summary: 'Create an admission request' })
   @ApiBody({ type: CreateAdmissionRequestDto })
   @ApiCreatedResponseData(AdmissionRequestEntity, { description: 'Admission request created' })
   @ApiBadRequestResponse({ description: 'Invalid payload' })
   async createRequest(@Body() body: CreateAdmissionRequestDto) {
+    validateStringFieldsMaxLength([
+      { fieldName: 'name', value: body.name, maxLength: this.maxLength.name, required: true },
+      { fieldName: 'lastName1', value: body.lastName1, maxLength: this.maxLength.lastName, required: true },
+      { fieldName: 'lastName2', value: body.lastName2, maxLength: this.maxLength.lastName, allowNull: true },
+      { fieldName: 'email', value: body.email, maxLength: this.maxLength.email, required: true },
+      { fieldName: 'desiredUsername', value: body.desiredUsername, maxLength: this.maxLength.desiredUsername, required: true },
+      { fieldName: 'photoUrl', value: body.photoUrl, maxLength: this.maxLength.url, allowNull: true },
+      { fieldName: 'declaredHealthLevel', value: body.declaredHealthLevel, maxLength: this.maxLength.freeText, allowNull: true },
+      { fieldName: 'previousExperience', value: body.previousExperience, maxLength: this.maxLength.freeText, allowNull: true },
+      { fieldName: 'physicalCondition', value: body.physicalCondition, maxLength: this.maxLength.freeText, allowNull: true },
+      { fieldName: 'declaredSkills', value: body.declaredSkills, maxLength: this.maxLength.freeText, allowNull: true },
+    ]);
+
     try {
       const request = await this.service.createRequest(body);
       return {
@@ -73,8 +102,7 @@ export class AdmissionRequestController {
   async getRequestById(@Param('id') id: string) {
     if (!id) throw new BadRequestException('Invalid ID');
 
-    const parsedId = Number.parseInt(id, 10);
-    if (Number.isNaN(parsedId)) throw new BadRequestException('Invalid ID');
+    const parsedId = parsePositiveInt(id, 'Invalid ID');
 
     try {
       const request = await this.service.getRequestById(parsedId);
@@ -110,14 +138,15 @@ export class AdmissionRequestController {
       } = {};
 
       if (campId) {
-        const parsedCampId = Number.parseInt(campId, 10);
-        if (Number.isNaN(parsedCampId)) throw new BadRequestException('Invalid camp ID');
+        const parsedCampId = parsePositiveInt(campId, 'Invalid camp ID');
         filters.campId = parsedCampId;
       }
 
+      if (status) assertEnumValue(status, ADMISSION_REQUEST_STATUS_VALUES, 'Invalid status');
+
       if (status) filters.status = status;
-      if (page) filters.page = Number.parseInt(page, 10);
-      if (limit) filters.limit = Number.parseInt(limit, 10);
+      if (page) filters.page = parsePositiveInt(page, 'Invalid page');
+      if (limit) filters.limit = parsePositiveInt(limit, 'Invalid limit');
 
       const result = await this.service.getAllRequests(filters);
       const resolvedPage = filters.page || 1;
@@ -147,8 +176,22 @@ export class AdmissionRequestController {
   async updateRequest(@Param('id') id: string, @Body() body: UpdateAdmissionRequestDto) {
     if (!id) throw new BadRequestException('Invalid ID');
 
-    const parsedId = Number.parseInt(id, 10);
-    if (Number.isNaN(parsedId)) throw new BadRequestException('Invalid ID');
+    const parsedId = parsePositiveInt(id, 'Invalid ID');
+
+    assertNonEmptyPayload(body);
+
+    validateStringFieldsMaxLength([
+      { fieldName: 'name', value: body.name, maxLength: this.maxLength.name },
+      { fieldName: 'lastName1', value: body.lastName1, maxLength: this.maxLength.lastName },
+      { fieldName: 'lastName2', value: body.lastName2, maxLength: this.maxLength.lastName, allowNull: true },
+      { fieldName: 'email', value: body.email, maxLength: this.maxLength.email },
+      { fieldName: 'desiredUsername', value: body.desiredUsername, maxLength: this.maxLength.desiredUsername },
+      { fieldName: 'photoUrl', value: body.photoUrl, maxLength: this.maxLength.url, allowNull: true },
+      { fieldName: 'declaredHealthLevel', value: body.declaredHealthLevel, maxLength: this.maxLength.freeText, allowNull: true },
+      { fieldName: 'previousExperience', value: body.previousExperience, maxLength: this.maxLength.freeText, allowNull: true },
+      { fieldName: 'physicalCondition', value: body.physicalCondition, maxLength: this.maxLength.freeText, allowNull: true },
+      { fieldName: 'declaredSkills', value: body.declaredSkills, maxLength: this.maxLength.freeText, allowNull: true },
+    ]);
 
     try {
       const request = await this.service.updateRequest(parsedId, body);
@@ -170,8 +213,7 @@ export class AdmissionRequestController {
   async deleteRequest(@Param('id') id: string) {
     if (!id) throw new BadRequestException('Invalid ID');
 
-    const parsedId = Number.parseInt(id, 10);
-    if (Number.isNaN(parsedId)) throw new BadRequestException('Invalid ID');
+    const parsedId = parsePositiveInt(id, 'Invalid ID');
 
     try {
       await this.service.deleteRequest(parsedId);
@@ -196,10 +238,15 @@ export class AdmissionRequestController {
   ) {
     if (!id) throw new BadRequestException('Invalid ID');
 
-    const parsedId = Number.parseInt(id, 10);
-    if (Number.isNaN(parsedId)) throw new BadRequestException('Invalid ID');
+    const parsedId = parsePositiveInt(id, 'Invalid ID');
 
     const { oficioSugeridoId, decision } = body;
+
+    if (!Number.isInteger(oficioSugeridoId) || oficioSugeridoId < 1) {
+      throw new BadRequestException('Invalid oficioSugeridoId');
+    }
+
+    assertEnumValue(decision, ['ACCEPT', 'REJECT'] as const, 'Invalid decision');
 
     try {
       const request = await this.service.processWithAI(parsedId, oficioSugeridoId, decision);
@@ -225,10 +272,27 @@ export class AdmissionRequestController {
   ) {
     if (!id) throw new BadRequestException('Invalid ID');
 
-    const parsedId = Number.parseInt(id, 10);
-    if (Number.isNaN(parsedId)) throw new BadRequestException('Invalid ID');
+    const parsedId = parsePositiveInt(id, 'Invalid ID');
 
     const { adminUserId, approved, rejectionReason } = body;
+
+    if (!Number.isInteger(adminUserId) || adminUserId < 1) {
+      throw new BadRequestException('Invalid adminUserId');
+    }
+
+    assertBooleanValue(approved, 'Invalid approved flag');
+
+    if (!approved && (!rejectionReason || !rejectionReason.trim())) {
+      throw new BadRequestException('Rejection reason is required when request is rejected');
+    }
+
+    validateStringFieldsMaxLength([
+      {
+        fieldName: 'rejectionReason',
+        value: rejectionReason,
+        maxLength: this.maxLength.rejectionReason,
+      },
+    ]);
 
     try {
       const request = await this.service.reviewByAdmin(
@@ -255,8 +319,7 @@ export class AdmissionRequestController {
   async getPendingByCamp(@Param('campId') campId: string) {
     if (!campId) throw new BadRequestException('Invalid camp ID');
 
-    const parsedCampId = Number.parseInt(campId, 10);
-    if (Number.isNaN(parsedCampId)) throw new BadRequestException('Invalid camp ID');
+    const parsedCampId = parsePositiveInt(campId, 'Invalid camp ID');
 
     try {
       const requests = await this.service.getPendingByCamp(parsedCampId);

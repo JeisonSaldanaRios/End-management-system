@@ -21,6 +21,7 @@ import {
   ApiOkResponseList,
   ApiOkResponseMessage,
 } from '../../common/swagger/api-response.decorator';
+import { parsePositiveInt } from '../../common/validation/request-validation.util';
 
 
 import { DeliveredTransferResourceService } from './deliveredTransferResource.service';
@@ -65,8 +66,7 @@ export class DeliveredTransferResourceController {
   async getById(@Param('id') id: string) {
     if (!id) throw new BadRequestException('Invalid ID');
 
-    const parsedId = Number.parseInt(id, 10);
-    if (Number.isNaN(parsedId)) throw new BadRequestException('Invalid ID');
+    const parsedId = parsePositiveInt(id, 'Invalid ID');
 
     const delivered = await this.service.getDeliveredResourceById(parsedId);
     if (!delivered) throw new NotFoundException('Delivered transfer resource not found');
@@ -94,33 +94,21 @@ export class DeliveredTransferResourceController {
       } = {};
 
       if (transferId) {
-        const parsedTransferId = Number.parseInt(transferId, 10);
-        if (Number.isNaN(parsedTransferId)) throw new BadRequestException('Invalid transferId');
+        const parsedTransferId = parsePositiveInt(transferId, 'Invalid transferId');
         filters.transferId = parsedTransferId;
       }
 
       if (resourceTypeId) {
-        const parsedResourceTypeId = Number.parseInt(resourceTypeId, 10);
-        if (Number.isNaN(parsedResourceTypeId)) {
-          throw new BadRequestException('Invalid resourceTypeId');
-        }
+        const parsedResourceTypeId = parsePositiveInt(resourceTypeId, 'Invalid resourceTypeId');
         filters.resourceTypeId = parsedResourceTypeId;
       }
 
       if (page) {
-        const parsedPage = Number.parseInt(page, 10);
-        if (Number.isNaN(parsedPage) || parsedPage < 1) {
-          throw new BadRequestException('Invalid page');
-        }
-        filters.page = parsedPage;
+        filters.page = parsePositiveInt(page, 'Invalid page');
       }
 
       if (limit) {
-        const parsedLimit = Number.parseInt(limit, 10);
-        if (Number.isNaN(parsedLimit) || parsedLimit < 1) {
-          throw new BadRequestException('Invalid limit');
-        }
-        filters.limit = parsedLimit;
+        filters.limit = parsePositiveInt(limit, 'Invalid limit');
       }
 
       const result = await this.service.getAllDeliveredResources(filters);
@@ -158,8 +146,7 @@ export class DeliveredTransferResourceController {
   ) {
     if (!id) throw new BadRequestException('Invalid ID');
 
-    const parsedId = Number.parseInt(id, 10);
-    if (Number.isNaN(parsedId)) throw new BadRequestException('Invalid ID');
+    const parsedId = parsePositiveInt(id, 'Invalid ID');
 
     try {
       const delivered = await this.service.updateDeliveredResource(parsedId, body);
@@ -189,8 +176,7 @@ export class DeliveredTransferResourceController {
   async delete(@Param('id') id: string) {
     if (!id) throw new BadRequestException('Invalid ID');
 
-    const parsedId = Number.parseInt(id, 10);
-    if (Number.isNaN(parsedId)) throw new BadRequestException('Invalid ID');
+    const parsedId = parsePositiveInt(id, 'Invalid ID');
 
     try {
       const deleted = await this.service.deleteDeliveredResource(parsedId);

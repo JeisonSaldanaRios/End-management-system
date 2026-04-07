@@ -21,6 +21,7 @@ import {
   ApiOkResponseList,
   ApiOkResponseMessage,
 } from '../../common/swagger/api-response.decorator';
+import { parsePositiveInt } from '../../common/validation/request-validation.util';
 
 
 import { EvaluatedCriteriaReportService } from './evaluatedCriteriaReport.service';
@@ -63,8 +64,7 @@ export class EvaluatedCriteriaReportController {
   async getById(@Param('id') id: string) {
     if (!id) throw new BadRequestException('Invalid ID');
 
-    const parsedId = Number.parseInt(id, 10);
-    if (Number.isNaN(parsedId)) throw new BadRequestException('Invalid ID');
+    const parsedId = parsePositiveInt(id, 'Invalid ID');
 
     const item = await this.service.getItemById(parsedId);
     if (!item) throw new NotFoundException('Evaluated criteria report not found');
@@ -92,31 +92,21 @@ export class EvaluatedCriteriaReportController {
       } = {};
 
       if (reportId) {
-        const parsedReportId = Number.parseInt(reportId, 10);
-        if (Number.isNaN(parsedReportId)) throw new BadRequestException('Invalid reportId');
+        const parsedReportId = parsePositiveInt(reportId, 'Invalid reportId');
         filters.reportId = parsedReportId;
       }
 
       if (criteriaId) {
-        const parsedCriteriaId = Number.parseInt(criteriaId, 10);
-        if (Number.isNaN(parsedCriteriaId)) throw new BadRequestException('Invalid criteriaId');
+        const parsedCriteriaId = parsePositiveInt(criteriaId, 'Invalid criteriaId');
         filters.criteriaId = parsedCriteriaId;
       }
 
       if (page) {
-        const parsedPage = Number.parseInt(page, 10);
-        if (Number.isNaN(parsedPage) || parsedPage < 1) {
-          throw new BadRequestException('Invalid page');
-        }
-        filters.page = parsedPage;
+        filters.page = parsePositiveInt(page, 'Invalid page');
       }
 
       if (limit) {
-        const parsedLimit = Number.parseInt(limit, 10);
-        if (Number.isNaN(parsedLimit) || parsedLimit < 1) {
-          throw new BadRequestException('Invalid limit');
-        }
-        filters.limit = parsedLimit;
+        filters.limit = parsePositiveInt(limit, 'Invalid limit');
       }
 
       const result = await this.service.getAllItems(filters);
@@ -149,8 +139,7 @@ export class EvaluatedCriteriaReportController {
   async update(@Param('id') id: string, @Body() body: UpdateEvaluatedCriteriaReportDTO) {
     if (!id) throw new BadRequestException('Invalid ID');
 
-    const parsedId = Number.parseInt(id, 10);
-    if (Number.isNaN(parsedId)) throw new BadRequestException('Invalid ID');
+    const parsedId = parsePositiveInt(id, 'Invalid ID');
 
     try {
       const item = await this.service.updateItem(parsedId, body);
@@ -176,8 +165,7 @@ export class EvaluatedCriteriaReportController {
   async delete(@Param('id') id: string) {
     if (!id) throw new BadRequestException('Invalid ID');
 
-    const parsedId = Number.parseInt(id, 10);
-    if (Number.isNaN(parsedId)) throw new BadRequestException('Invalid ID');
+    const parsedId = parsePositiveInt(id, 'Invalid ID');
 
     try {
       const deleted = await this.service.deleteItem(parsedId);

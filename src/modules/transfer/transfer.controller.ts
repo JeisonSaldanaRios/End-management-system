@@ -20,6 +20,7 @@ import {
   ApiOkResponseList,
   ApiOkResponseMessage,
 } from '../../common/swagger/api-response.decorator';
+import { parsePositiveInt } from '../../common/validation/request-validation.util';
 
 import { TransferService } from './transfer.service';
 import type {
@@ -62,8 +63,7 @@ export class TransferController {
   async getById(@Param('id') id: string) {
     if (!id) throw new BadRequestException('Invalid ID');
 
-    const parsedId = Number.parseInt(id, 10);
-    if (Number.isNaN(parsedId)) throw new BadRequestException('Invalid ID');
+    const parsedId = parsePositiveInt(id, 'Invalid ID');
 
     const transfer = await this.service.getTransferById(parsedId);
     if (!transfer) throw new NotFoundException('Transfer not found');
@@ -91,8 +91,7 @@ export class TransferController {
       } = {};
 
       if (requestId) {
-        const parsedRequestId = Number.parseInt(requestId, 10);
-        if (Number.isNaN(parsedRequestId)) throw new BadRequestException('Invalid requestId');
+        const parsedRequestId = parsePositiveInt(requestId, 'Invalid requestId');
         filters.requestId = parsedRequestId;
       }
 
@@ -101,19 +100,11 @@ export class TransferController {
       }
 
       if (page) {
-        const parsedPage = Number.parseInt(page, 10);
-        if (Number.isNaN(parsedPage) || parsedPage < 1) {
-          throw new BadRequestException('Invalid page');
-        }
-        filters.page = parsedPage;
+        filters.page = parsePositiveInt(page, 'Invalid page');
       }
 
       if (limit) {
-        const parsedLimit = Number.parseInt(limit, 10);
-        if (Number.isNaN(parsedLimit) || parsedLimit < 1) {
-          throw new BadRequestException('Invalid limit');
-        }
-        filters.limit = parsedLimit;
+        filters.limit = parsePositiveInt(limit, 'Invalid limit');
       }
 
       const result = await this.service.getAllTransfers(filters);
@@ -146,8 +137,7 @@ export class TransferController {
   async update(@Param('id') id: string, @Body() body: UpdateTransferDTO) {
     if (!id) throw new BadRequestException('Invalid ID');
 
-    const parsedId = Number.parseInt(id, 10);
-    if (Number.isNaN(parsedId)) throw new BadRequestException('Invalid ID');
+    const parsedId = parsePositiveInt(id, 'Invalid ID');
 
     try {
       const transfer = await this.service.updateTransfer(parsedId, body);
@@ -173,8 +163,7 @@ export class TransferController {
   async delete(@Param('id') id: string) {
     if (!id) throw new BadRequestException('Invalid ID');
 
-    const parsedId = Number.parseInt(id, 10);
-    if (Number.isNaN(parsedId)) throw new BadRequestException('Invalid ID');
+    const parsedId = parsePositiveInt(id, 'Invalid ID');
 
     try {
       const deleted = await this.service.deleteTransfer(parsedId);

@@ -19,6 +19,7 @@ import {
   ApiCreatedResponseData,
   ApiOkResponseList,
 } from '../../common/swagger/api-response.decorator';
+import { parsePositiveInt } from '../../common/validation/request-validation.util';
 
 
 import { CampAchievementService } from './campAchievement.service';
@@ -55,11 +56,8 @@ export class CampAchievementController {
 
   @Get(':campId/:achievementId')
   async getByKey(@Param('campId') campId: string, @Param('achievementId') achievementId: string) {
-    const parsedCampId = Number.parseInt(campId, 10);
-    const parsedAchievementId = Number.parseInt(achievementId, 10);
-    if (Number.isNaN(parsedCampId) || Number.isNaN(parsedAchievementId)) {
-      throw new BadRequestException('Invalid campId or achievementId');
-    }
+    const parsedCampId = parsePositiveInt(campId, 'Invalid campId');
+    const parsedAchievementId = parsePositiveInt(achievementId, 'Invalid achievementId');
 
     const campAchievement = await this.service.getCampAchievementByKey(
       parsedCampId,
@@ -92,41 +90,26 @@ export class CampAchievementController {
       } = {};
 
       if (campId) {
-        const parsedCampId = Number.parseInt(campId, 10);
-        if (Number.isNaN(parsedCampId)) throw new BadRequestException('Invalid campId');
+        const parsedCampId = parsePositiveInt(campId, 'Invalid campId');
         filters.campId = parsedCampId;
       }
 
       if (achievementId) {
-        const parsedAchievementId = Number.parseInt(achievementId, 10);
-        if (Number.isNaN(parsedAchievementId)) {
-          throw new BadRequestException('Invalid achievementId');
-        }
+        const parsedAchievementId = parsePositiveInt(achievementId, 'Invalid achievementId');
         filters.achievementId = parsedAchievementId;
       }
 
       if (unlockedBy) {
-        const parsedUnlockedBy = Number.parseInt(unlockedBy, 10);
-        if (Number.isNaN(parsedUnlockedBy)) {
-          throw new BadRequestException('Invalid unlockedBy');
-        }
+        const parsedUnlockedBy = parsePositiveInt(unlockedBy, 'Invalid unlockedBy');
         filters.unlockedBy = parsedUnlockedBy;
       }
 
       if (page) {
-        const parsedPage = Number.parseInt(page, 10);
-        if (Number.isNaN(parsedPage) || parsedPage < 1) {
-          throw new BadRequestException('Invalid page');
-        }
-        filters.page = parsedPage;
+        filters.page = parsePositiveInt(page, 'Invalid page');
       }
 
       if (limit) {
-        const parsedLimit = Number.parseInt(limit, 10);
-        if (Number.isNaN(parsedLimit) || parsedLimit < 1) {
-          throw new BadRequestException('Invalid limit');
-        }
-        filters.limit = parsedLimit;
+        filters.limit = parsePositiveInt(limit, 'Invalid limit');
       }
 
       const result = await this.service.getAllCampAchievements(filters);
@@ -156,11 +139,8 @@ export class CampAchievementController {
     @Param('achievementId') achievementId: string,
     @Body() body: UpdateCampAchievementDTO,
   ) {
-    const parsedCampId = Number.parseInt(campId, 10);
-    const parsedAchievementId = Number.parseInt(achievementId, 10);
-    if (Number.isNaN(parsedCampId) || Number.isNaN(parsedAchievementId)) {
-      throw new BadRequestException('Invalid campId or achievementId');
-    }
+    const parsedCampId = parsePositiveInt(campId, 'Invalid campId');
+    const parsedAchievementId = parsePositiveInt(achievementId, 'Invalid achievementId');
 
     try {
       const campAchievement = await this.service.updateCampAchievement(
@@ -184,11 +164,8 @@ export class CampAchievementController {
 
   @Delete(':campId/:achievementId')
   async delete(@Param('campId') campId: string, @Param('achievementId') achievementId: string) {
-    const parsedCampId = Number.parseInt(campId, 10);
-    const parsedAchievementId = Number.parseInt(achievementId, 10);
-    if (Number.isNaN(parsedCampId) || Number.isNaN(parsedAchievementId)) {
-      throw new BadRequestException('Invalid campId or achievementId');
-    }
+    const parsedCampId = parsePositiveInt(campId, 'Invalid campId');
+    const parsedAchievementId = parsePositiveInt(achievementId, 'Invalid achievementId');
 
     try {
       const deleted = await this.service.deleteCampAchievement(parsedCampId, parsedAchievementId);

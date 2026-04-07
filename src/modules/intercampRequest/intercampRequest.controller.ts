@@ -22,6 +22,7 @@ import {
   ApiOkResponseList,
   ApiOkResponseMessage,
 } from '../../common/swagger/api-response.decorator';
+import { parsePositiveInt } from '../../common/validation/request-validation.util';
 
 
 import { IntercampRequestService } from './intercampRequest.service';
@@ -69,8 +70,7 @@ export class IntercampRequestController {
   async getById(@Param('id') id: string) {
     if (!id) throw new BadRequestException('Invalid ID');
 
-    const parsedId = Number.parseInt(id, 10);
-    if (Number.isNaN(parsedId)) throw new BadRequestException('Invalid ID');
+    const parsedId = parsePositiveInt(id, 'Invalid ID');
 
     const request = await this.service.getRequestById(parsedId);
     if (!request) throw new NotFoundException('Intercamp request not found');
@@ -104,18 +104,12 @@ export class IntercampRequestController {
       } = {};
 
       if (originCampId) {
-        const parsedOriginCampId = Number.parseInt(originCampId, 10);
-        if (Number.isNaN(parsedOriginCampId)) {
-          throw new BadRequestException('Invalid originCampId');
-        }
+        const parsedOriginCampId = parsePositiveInt(originCampId, 'Invalid originCampId');
         filters.originCampId = parsedOriginCampId;
       }
 
       if (destinationCampId) {
-        const parsedDestinationCampId = Number.parseInt(destinationCampId, 10);
-        if (Number.isNaN(parsedDestinationCampId)) {
-          throw new BadRequestException('Invalid destinationCampId');
-        }
+        const parsedDestinationCampId = parsePositiveInt(destinationCampId, 'Invalid destinationCampId');
         filters.destinationCampId = parsedDestinationCampId;
       }
 
@@ -124,35 +118,21 @@ export class IntercampRequestController {
       }
 
       if (createdBy) {
-        const parsedCreatedBy = Number.parseInt(createdBy, 10);
-        if (Number.isNaN(parsedCreatedBy)) {
-          throw new BadRequestException('Invalid createdBy');
-        }
+        const parsedCreatedBy = parsePositiveInt(createdBy, 'Invalid createdBy');
         filters.createdBy = parsedCreatedBy;
       }
 
       if (respondedBy) {
-        const parsedRespondedBy = Number.parseInt(respondedBy, 10);
-        if (Number.isNaN(parsedRespondedBy)) {
-          throw new BadRequestException('Invalid respondedBy');
-        }
+        const parsedRespondedBy = parsePositiveInt(respondedBy, 'Invalid respondedBy');
         filters.respondedBy = parsedRespondedBy;
       }
 
       if (page) {
-        const parsedPage = Number.parseInt(page, 10);
-        if (Number.isNaN(parsedPage) || parsedPage < 1) {
-          throw new BadRequestException('Invalid page');
-        }
-        filters.page = parsedPage;
+        filters.page = parsePositiveInt(page, 'Invalid page');
       }
 
       if (limit) {
-        const parsedLimit = Number.parseInt(limit, 10);
-        if (Number.isNaN(parsedLimit) || parsedLimit < 1) {
-          throw new BadRequestException('Invalid limit');
-        }
-        filters.limit = parsedLimit;
+        filters.limit = parsePositiveInt(limit, 'Invalid limit');
       }
 
       const result = await this.service.getAllRequests(filters);
@@ -187,8 +167,7 @@ export class IntercampRequestController {
   async update(@Param('id') id: string, @Body() body: UpdateIntercampRequestDTO) {
     if (!id) throw new BadRequestException('Invalid ID');
 
-    const parsedId = Number.parseInt(id, 10);
-    if (Number.isNaN(parsedId)) throw new BadRequestException('Invalid ID');
+    const parsedId = parsePositiveInt(id, 'Invalid ID');
 
     try {
       const request = await this.service.updateRequest(parsedId, body);
@@ -220,8 +199,7 @@ export class IntercampRequestController {
   async delete(@Param('id') id: string) {
     if (!id) throw new BadRequestException('Invalid ID');
 
-    const parsedId = Number.parseInt(id, 10);
-    if (Number.isNaN(parsedId)) throw new BadRequestException('Invalid ID');
+    const parsedId = parsePositiveInt(id, 'Invalid ID');
 
     try {
       const deleted = await this.service.deleteRequest(parsedId);

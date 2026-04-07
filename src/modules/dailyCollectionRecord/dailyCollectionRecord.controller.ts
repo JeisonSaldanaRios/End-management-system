@@ -21,6 +21,7 @@ import {
   ApiOkResponseList,
   ApiOkResponseMessage,
 } from '../../common/swagger/api-response.decorator';
+import { parsePositiveInt } from '../../common/validation/request-validation.util';
 
 
 import { DailyCollectionRecordService } from './dailyCollectionRecord.service';
@@ -67,8 +68,7 @@ export class DailyCollectionRecordController {
   async getById(@Param('id') id: string) {
     if (!id) throw new BadRequestException('Invalid ID');
 
-    const parsedId = Number.parseInt(id, 10);
-    if (Number.isNaN(parsedId)) throw new BadRequestException('Invalid ID');
+    const parsedId = parsePositiveInt(id, 'Invalid ID');
 
     const record = await this.service.getRecordById(parsedId);
     if (!record) throw new NotFoundException('Daily collection record not found');
@@ -100,22 +100,17 @@ export class DailyCollectionRecordController {
       } = {};
 
       if (campId) {
-        const parsedCampId = Number.parseInt(campId, 10);
-        if (Number.isNaN(parsedCampId)) throw new BadRequestException('Invalid camp ID');
+        const parsedCampId = parsePositiveInt(campId, 'Invalid camp ID');
         filters.campId = parsedCampId;
       }
 
       if (personId) {
-        const parsedPersonId = Number.parseInt(personId, 10);
-        if (Number.isNaN(parsedPersonId)) throw new BadRequestException('Invalid person ID');
+        const parsedPersonId = parsePositiveInt(personId, 'Invalid person ID');
         filters.personId = parsedPersonId;
       }
 
       if (resourceTypeId) {
-        const parsedResourceTypeId = Number.parseInt(resourceTypeId, 10);
-        if (Number.isNaN(parsedResourceTypeId)) {
-          throw new BadRequestException('Invalid resource type ID');
-        }
+        const parsedResourceTypeId = parsePositiveInt(resourceTypeId, 'Invalid resource type ID');
         filters.resourceTypeId = parsedResourceTypeId;
       }
 
@@ -127,19 +122,11 @@ export class DailyCollectionRecordController {
       }
 
       if (page) {
-        const parsedPage = Number.parseInt(page, 10);
-        if (Number.isNaN(parsedPage) || parsedPage < 1) {
-          throw new BadRequestException('Invalid page');
-        }
-        filters.page = parsedPage;
+        filters.page = parsePositiveInt(page, 'Invalid page');
       }
 
       if (limit) {
-        const parsedLimit = Number.parseInt(limit, 10);
-        if (Number.isNaN(parsedLimit) || parsedLimit < 1) {
-          throw new BadRequestException('Invalid limit');
-        }
-        filters.limit = parsedLimit;
+        filters.limit = parsePositiveInt(limit, 'Invalid limit');
       }
 
       const result = await this.service.getAllRecords(filters);
@@ -172,8 +159,7 @@ export class DailyCollectionRecordController {
   async update(@Param('id') id: string, @Body() body: UpdateDailyCollectionRecordDTO) {
     if (!id) throw new BadRequestException('Invalid ID');
 
-    const parsedId = Number.parseInt(id, 10);
-    if (Number.isNaN(parsedId)) throw new BadRequestException('Invalid ID');
+    const parsedId = parsePositiveInt(id, 'Invalid ID');
 
     try {
       const record = await this.service.updateRecord(parsedId, body);
@@ -203,8 +189,7 @@ export class DailyCollectionRecordController {
   async delete(@Param('id') id: string) {
     if (!id) throw new BadRequestException('Invalid ID');
 
-    const parsedId = Number.parseInt(id, 10);
-    if (Number.isNaN(parsedId)) throw new BadRequestException('Invalid ID');
+    const parsedId = parsePositiveInt(id, 'Invalid ID');
 
     try {
       const deleted = await this.service.deleteRecord(parsedId);

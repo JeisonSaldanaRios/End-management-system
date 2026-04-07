@@ -29,6 +29,7 @@ import {
   ApiOkResponseList,
   ApiOkResponseMessage,
 } from '../../common/swagger/api-response.decorator';
+import { parsePositiveInt } from '../../common/validation/request-validation.util';
 
 
 import { OccupationAssignmentCriteriaService } from './occupationAssignmentCriteria.service';
@@ -72,8 +73,7 @@ export class OccupationAssignmentCriteriaController {
   async getById(@Param('id') id: string) {
     if (!id) throw new BadRequestException('Invalid ID');
 
-    const parsedId = Number.parseInt(id, 10);
-    if (Number.isNaN(parsedId)) throw new BadRequestException('Invalid ID');
+    const parsedId = parsePositiveInt(id, 'Invalid ID');
 
     const criteria = await this.service.getCriteriaById(parsedId);
     if (!criteria) throw new NotFoundException('Criteria not found');
@@ -103,10 +103,7 @@ export class OccupationAssignmentCriteriaController {
       } = {};
 
       if (occupationId) {
-        const parsedOccupationId = Number.parseInt(occupationId, 10);
-        if (Number.isNaN(parsedOccupationId)) {
-          throw new BadRequestException('Invalid occupationId');
-        }
+        const parsedOccupationId = parsePositiveInt(occupationId, 'Invalid occupationId');
         filters.occupationId = parsedOccupationId;
       }
 
@@ -122,19 +119,11 @@ export class OccupationAssignmentCriteriaController {
       }
 
       if (page) {
-        const parsedPage = Number.parseInt(page, 10);
-        if (Number.isNaN(parsedPage) || parsedPage < 1) {
-          throw new BadRequestException('Invalid page');
-        }
-        filters.page = parsedPage;
+        filters.page = parsePositiveInt(page, 'Invalid page');
       }
 
       if (limit) {
-        const parsedLimit = Number.parseInt(limit, 10);
-        if (Number.isNaN(parsedLimit) || parsedLimit < 1) {
-          throw new BadRequestException('Invalid limit');
-        }
-        filters.limit = parsedLimit;
+        filters.limit = parsePositiveInt(limit, 'Invalid limit');
       }
 
       const result = await this.service.getAllCriteria(filters);
@@ -170,8 +159,7 @@ export class OccupationAssignmentCriteriaController {
   ) {
     if (!id) throw new BadRequestException('Invalid ID');
 
-    const parsedId = Number.parseInt(id, 10);
-    if (Number.isNaN(parsedId)) throw new BadRequestException('Invalid ID');
+    const parsedId = parsePositiveInt(id, 'Invalid ID');
 
     try {
       const criteria = await this.service.updateCriteria(parsedId, body);
@@ -197,8 +185,7 @@ export class OccupationAssignmentCriteriaController {
   async delete(@Param('id') id: string) {
     if (!id) throw new BadRequestException('Invalid ID');
 
-    const parsedId = Number.parseInt(id, 10);
-    if (Number.isNaN(parsedId)) throw new BadRequestException('Invalid ID');
+    const parsedId = parsePositiveInt(id, 'Invalid ID');
 
     try {
       const deleted = await this.service.deleteCriteria(parsedId);

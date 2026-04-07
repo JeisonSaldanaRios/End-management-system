@@ -29,6 +29,7 @@ import {
   ApiOkResponseList,
   ApiOkResponseMessage,
 } from '../../common/swagger/api-response.decorator';
+import { parsePositiveInt } from '../../common/validation/request-validation.util';
 
 
 import { RequestResourceDetailService } from './requestResourceDetail.service';
@@ -73,8 +74,7 @@ export class RequestResourceDetailController {
   async getById(@Param('id') id: string) {
     if (!id) throw new BadRequestException('Invalid ID');
 
-    const parsedId = Number.parseInt(id, 10);
-    if (Number.isNaN(parsedId)) throw new BadRequestException('Invalid ID');
+    const parsedId = parsePositiveInt(id, 'Invalid ID');
 
     const detail = await this.service.getDetailById(parsedId);
     if (!detail) throw new NotFoundException('Request resource detail not found');
@@ -102,33 +102,21 @@ export class RequestResourceDetailController {
       } = {};
 
       if (requestId) {
-        const parsedRequestId = Number.parseInt(requestId, 10);
-        if (Number.isNaN(parsedRequestId)) throw new BadRequestException('Invalid requestId');
+        const parsedRequestId = parsePositiveInt(requestId, 'Invalid requestId');
         filters.requestId = parsedRequestId;
       }
 
       if (resourceTypeId) {
-        const parsedResourceTypeId = Number.parseInt(resourceTypeId, 10);
-        if (Number.isNaN(parsedResourceTypeId)) {
-          throw new BadRequestException('Invalid resourceTypeId');
-        }
+        const parsedResourceTypeId = parsePositiveInt(resourceTypeId, 'Invalid resourceTypeId');
         filters.resourceTypeId = parsedResourceTypeId;
       }
 
       if (page) {
-        const parsedPage = Number.parseInt(page, 10);
-        if (Number.isNaN(parsedPage) || parsedPage < 1) {
-          throw new BadRequestException('Invalid page');
-        }
-        filters.page = parsedPage;
+        filters.page = parsePositiveInt(page, 'Invalid page');
       }
 
       if (limit) {
-        const parsedLimit = Number.parseInt(limit, 10);
-        if (Number.isNaN(parsedLimit) || parsedLimit < 1) {
-          throw new BadRequestException('Invalid limit');
-        }
-        filters.limit = parsedLimit;
+        filters.limit = parsePositiveInt(limit, 'Invalid limit');
       }
 
       const result = await this.service.getAllDetails(filters);
@@ -163,8 +151,7 @@ export class RequestResourceDetailController {
   async update(@Param('id') id: string, @Body() body: UpdateRequestResourceDetailDTO) {
     if (!id) throw new BadRequestException('Invalid ID');
 
-    const parsedId = Number.parseInt(id, 10);
-    if (Number.isNaN(parsedId)) throw new BadRequestException('Invalid ID');
+    const parsedId = parsePositiveInt(id, 'Invalid ID');
 
     try {
       const detail = await this.service.updateDetail(parsedId, body);
@@ -192,8 +179,7 @@ export class RequestResourceDetailController {
   async delete(@Param('id') id: string) {
     if (!id) throw new BadRequestException('Invalid ID');
 
-    const parsedId = Number.parseInt(id, 10);
-    if (Number.isNaN(parsedId)) throw new BadRequestException('Invalid ID');
+    const parsedId = parsePositiveInt(id, 'Invalid ID');
 
     try {
       const deleted = await this.service.deleteDetail(parsedId);

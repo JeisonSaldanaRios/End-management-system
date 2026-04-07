@@ -29,6 +29,7 @@ import {
   ApiOkResponseList,
   ApiOkResponseMessage,
 } from '../../common/swagger/api-response.decorator';
+import { parsePositiveInt } from '../../common/validation/request-validation.util';
 
 
 import { InventoryAlertService } from './inventoryAlert.service';
@@ -70,8 +71,7 @@ export class InventoryAlertController {
   async getById(@Param('id') id: string) {
     if (!id) throw new BadRequestException('Invalid ID');
 
-    const parsedId = Number.parseInt(id, 10);
-    if (Number.isNaN(parsedId)) throw new BadRequestException('Invalid ID');
+    const parsedId = parsePositiveInt(id, 'Invalid ID');
 
     const alert = await this.service.getAlertById(parsedId);
     if (!alert) throw new NotFoundException('Inventory alert not found');
@@ -101,16 +101,12 @@ export class InventoryAlertController {
       } = {};
 
       if (campId) {
-        const parsedCampId = Number.parseInt(campId, 10);
-        if (Number.isNaN(parsedCampId)) throw new BadRequestException('Invalid camp ID');
+        const parsedCampId = parsePositiveInt(campId, 'Invalid camp ID');
         filters.campId = parsedCampId;
       }
 
       if (resourceTypeId) {
-        const parsedResourceTypeId = Number.parseInt(resourceTypeId, 10);
-        if (Number.isNaN(parsedResourceTypeId)) {
-          throw new BadRequestException('Invalid resource type ID');
-        }
+        const parsedResourceTypeId = parsePositiveInt(resourceTypeId, 'Invalid resource type ID');
         filters.resourceTypeId = parsedResourceTypeId;
       }
 
@@ -122,19 +118,11 @@ export class InventoryAlertController {
       }
 
       if (page) {
-        const parsedPage = Number.parseInt(page, 10);
-        if (Number.isNaN(parsedPage) || parsedPage < 1) {
-          throw new BadRequestException('Invalid page');
-        }
-        filters.page = parsedPage;
+        filters.page = parsePositiveInt(page, 'Invalid page');
       }
 
       if (limit) {
-        const parsedLimit = Number.parseInt(limit, 10);
-        if (Number.isNaN(parsedLimit) || parsedLimit < 1) {
-          throw new BadRequestException('Invalid limit');
-        }
-        filters.limit = parsedLimit;
+        filters.limit = parsePositiveInt(limit, 'Invalid limit');
       }
 
       const result = await this.service.getAllAlerts(filters);
@@ -167,8 +155,7 @@ export class InventoryAlertController {
   async update(@Param('id') id: string, @Body() body: UpdateInventoryAlertDTO) {
     if (!id) throw new BadRequestException('Invalid ID');
 
-    const parsedId = Number.parseInt(id, 10);
-    if (Number.isNaN(parsedId)) throw new BadRequestException('Invalid ID');
+    const parsedId = parsePositiveInt(id, 'Invalid ID');
 
     try {
       const alert = await this.service.updateAlert(parsedId, body);
@@ -194,8 +181,7 @@ export class InventoryAlertController {
   async delete(@Param('id') id: string) {
     if (!id) throw new BadRequestException('Invalid ID');
 
-    const parsedId = Number.parseInt(id, 10);
-    if (Number.isNaN(parsedId)) throw new BadRequestException('Invalid ID');
+    const parsedId = parsePositiveInt(id, 'Invalid ID');
 
     try {
       const deleted = await this.service.deleteAlert(parsedId);

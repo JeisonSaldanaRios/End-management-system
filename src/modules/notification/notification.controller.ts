@@ -13,6 +13,15 @@ import {
 } from '@nestjs/common';
 
 import {
+  assertEnumValue,
+  assertNonEmptyPayload,
+  COMMON_MAX_LENGTH,
+  parseBooleanQuery,
+  parsePositiveInt,
+  validateStringFieldsMaxLength,
+} from '../../common/validation/request-validation.util';
+
+import {
   ApiBadRequestResponse,
   ApiBody,
   ApiNotFoundResponse,
@@ -35,7 +44,9 @@ import type {
   NotificationType,
   UpdateNotificationDTO,
 } from './notification.model';
+import { NOTIFICATION_TYPE_VALUES } from './notification.model';
 import type { SystemRole } from '../systemUser/systemUser.model';
+import { SYSTEM_ROLE_VALUES } from '../systemUser/systemUser.model';
 import { NotificationEntity } from './notification.entity';
 import { CreateNotificationDto, UpdateNotificationDto } from './dto';
 
@@ -50,6 +61,18 @@ export class NotificationController {
   @ApiCreatedResponseData(NotificationEntity, { description: 'Notification created' })
   @ApiBadRequestResponse({ description: 'Invalid payload' })
   async create(@Body() body: CreateNotificationDTO) {
+    validateStringFieldsMaxLength([
+      { fieldName: 'title', value: body.title, maxLength: COMMON_MAX_LENGTH.shortText, required: true },
+      { fieldName: 'message', value: body.message, maxLength: COMMON_MAX_LENGTH.longText, required: true },
+      { fieldName: 'sourceType', value: body.sourceType, maxLength: COMMON_MAX_LENGTH.shortText, allowNull: true },
+    ]);
+
+    assertEnumValue(body.type, NOTIFICATION_TYPE_VALUES, 'Invalid type');
+
+    if (body.targetRole) {
+      assertEnumValue(body.targetRole, SYSTEM_ROLE_VALUES, 'Invalid targetRole');
+    }
+
     try {
       const notification = await this.service.createNotification(body);
       return {
@@ -77,8 +100,7 @@ export class NotificationController {
   async getById(@Param('id') id: string) {
     if (!id) throw new BadRequestException('Invalid ID');
 
-    const parsedId = Number.parseInt(id, 10);
-    if (Number.isNaN(parsedId)) throw new BadRequestException('Invalid ID');
+    const parsedId = parsePositiveInt(id, 'Invalid ID');
 
     const notification = await this.service.getNotificationById(parsedId);
     if (!notification) throw new NotFoundException('Notification not found');
@@ -113,47 +135,35 @@ export class NotificationController {
       } = {};
 
       if (campId) {
-        const parsedCampId = Number.parseInt(campId, 10);
-        if (Number.isNaN(parsedCampId)) throw new BadRequestException('Invalid campId');
+        const parsedCampId = parsePositiveInt(campId, 'Invalid campId');
         filters.campId = parsedCampId;
       }
 
       if (userId) {
-        const parsedUserId = Number.parseInt(userId, 10);
-        if (Number.isNaN(parsedUserId)) throw new BadRequestException('Invalid userId');
+        const parsedUserId = parsePositiveInt(userId, 'Invalid userId');
         filters.userId = parsedUserId;
       }
 
       if (targetRole) {
+        assertEnumValue(targetRole, SYSTEM_ROLE_VALUES, 'Invalid targetRole');
         filters.targetRole = targetRole;
       }
 
       if (type) {
+        assertEnumValue(type, NOTIFICATION_TYPE_VALUES, 'Invalid type');
         filters.type = type;
       }
 
       if (read !== undefined) {
-        if (read === 'true' || read === 'false') {
-          filters.read = read === 'true';
-        } else {
-          throw new BadRequestException('Invalid read value (use true/false)');
-        }
+        filters.read = parseBooleanQuery(read, 'Invalid read value (use true/false)');
       }
 
       if (page) {
-        const parsedPage = Number.parseInt(page, 10);
-        if (Number.isNaN(parsedPage) || parsedPage < 1) {
-          throw new BadRequestException('Invalid page');
-        }
-        filters.page = parsedPage;
+        filters.page = parsePositiveInt(page, 'Invalid page');
       }
 
       if (limit) {
-        const parsedLimit = Number.parseInt(limit, 10);
-        if (Number.isNaN(parsedLimit) || parsedLimit < 1) {
-          throw new BadRequestException('Invalid limit');
-        }
-        filters.limit = parsedLimit;
+        filters.limit = parsePositiveInt(limit, 'Invalid limit');
       }
 
       const result = await this.service.getAllNotifications(filters);
@@ -186,8 +196,23 @@ export class NotificationController {
   @ApiNotFoundResponse({ description: 'Notification not found' })
   async update(@Param('id') id: string, @Body() body: UpdateNotificationDTO) {
     if (!id) throw new BadRequestException('Invalid ID');
-    const parsedId = Number.parseInt(id, 10);
-    if (Number.isNaN(parsedId)) throw new BadRequestException('Invalid ID');
+    const parsedId = parsePositiveInt(id, 'Invalid ID');
+
+    assertNonEmptyPayload(body);
+
+    validateStringFieldsMaxLength([
+      { fieldName: 'title', value: body.title, maxLength: COMMON_MAX_LENGTH.shortText },
+      { fieldName: 'message', value: body.message, maxLength: COMMON_MAX_LENGTH.longText },
+      { fieldName: 'sourceType', value: body.sourceType, maxLength: COMMON_MAX_LENGTH.shortText, allowNull: true },
+    ]);
+
+    if (body.type) {
+      assertEnumValue(body.type, NOTIFICATION_TYPE_VALUES, 'Invalid type');
+    }
+
+    if (body.targetRole) {
+      assertEnumValue(body.targetRole, SYSTEM_ROLE_VALUES, 'Invalid targetRole');
+    }
 
     try {
       const notification = await this.service.updateNotification(parsedId, body);
@@ -217,8 +242,7 @@ export class NotificationController {
   @ApiNotFoundResponse({ description: 'Notification not found' })
   async delete(@Param('id') id: string) {
     if (!id) throw new BadRequestException('Invalid ID');
-    const parsedId = Number.parseInt(id, 10);
-    if (Number.isNaN(parsedId)) throw new BadRequestException('Invalid ID');
+    const parsedId = parsePositiveInt(id, 'Invalid ID');
 
     try {
       const deleted = await this.service.deleteNotification(parsedId);

@@ -11,6 +11,13 @@ import {
   Query,
 } from '@nestjs/common';
 
+import {
+  assertNonEmptyPayload,
+  COMMON_MAX_LENGTH,
+  parsePositiveInt,
+  validateStringFieldsMaxLength,
+} from '../../common/validation/request-validation.util';
+
 
 import { ApiBadRequestResponse, ApiBody, ApiNotFoundResponse, ApiOperation, ApiParam, ApiQuery, ApiTags } from '@nestjs/swagger';
 
@@ -37,6 +44,13 @@ export class AchievementController {
   @ApiCreatedResponseData(AchievementEntity, { description: 'Achievement created' })
   @ApiBadRequestResponse({ description: 'Invalid payload' })
   async create(@Body() body: CreateAchievementDTO) {
+    validateStringFieldsMaxLength([
+      { fieldName: 'name', value: body.name, maxLength: COMMON_MAX_LENGTH.name, required: true },
+      { fieldName: 'description', value: body.description, maxLength: COMMON_MAX_LENGTH.longText, allowNull: true },
+      { fieldName: 'unlockCondition', value: body.unlockCondition, maxLength: COMMON_MAX_LENGTH.longText, required: true },
+      { fieldName: 'iconUrl', value: body.iconUrl, maxLength: COMMON_MAX_LENGTH.url, allowNull: true },
+    ]);
+
     try {
       const achievement = await this.service.createAchievement(body);
       return {
@@ -58,8 +72,7 @@ export class AchievementController {
   @ApiNotFoundResponse({ description: 'Achievement not found' })
   async getById(@Param('id') id: string) {
     if (!id) throw new BadRequestException('Invalid ID');
-    const parsedId = Number.parseInt(id, 10);
-    if (Number.isNaN(parsedId)) throw new BadRequestException('Invalid ID');
+    const parsedId = parsePositiveInt(id, 'Invalid ID');
 
     const achievement = await this.service.getAchievementById(parsedId);
     if (!achievement) throw new NotFoundException('Achievement not found');
@@ -79,22 +92,19 @@ export class AchievementController {
     try {
       const filters: { name?: string; page?: number; limit?: number } = {};
 
-      if (name) filters.name = name;
+      if (name) {
+        validateStringFieldsMaxLength([
+          { fieldName: 'name', value: name, maxLength: COMMON_MAX_LENGTH.name },
+        ]);
+        filters.name = name;
+      }
 
       if (page) {
-        const parsedPage = Number.parseInt(page, 10);
-        if (Number.isNaN(parsedPage) || parsedPage < 1) {
-          throw new BadRequestException('Invalid page');
-        }
-        filters.page = parsedPage;
+        filters.page = parsePositiveInt(page, 'Invalid page');
       }
 
       if (limit) {
-        const parsedLimit = Number.parseInt(limit, 10);
-        if (Number.isNaN(parsedLimit) || parsedLimit < 1) {
-          throw new BadRequestException('Invalid limit');
-        }
-        filters.limit = parsedLimit;
+        filters.limit = parsePositiveInt(limit, 'Invalid limit');
       }
 
       const result = await this.service.getAllAchievements(filters);
@@ -126,8 +136,16 @@ export class AchievementController {
   @ApiNotFoundResponse({ description: 'Achievement not found' })
   async update(@Param('id') id: string, @Body() body: UpdateAchievementDTO) {
     if (!id) throw new BadRequestException('Invalid ID');
-    const parsedId = Number.parseInt(id, 10);
-    if (Number.isNaN(parsedId)) throw new BadRequestException('Invalid ID');
+    const parsedId = parsePositiveInt(id, 'Invalid ID');
+
+    assertNonEmptyPayload(body);
+
+    validateStringFieldsMaxLength([
+      { fieldName: 'name', value: body.name, maxLength: COMMON_MAX_LENGTH.name },
+      { fieldName: 'description', value: body.description, maxLength: COMMON_MAX_LENGTH.longText, allowNull: true },
+      { fieldName: 'unlockCondition', value: body.unlockCondition, maxLength: COMMON_MAX_LENGTH.longText },
+      { fieldName: 'iconUrl', value: body.iconUrl, maxLength: COMMON_MAX_LENGTH.url, allowNull: true },
+    ]);
 
     try {
       const achievement = await this.service.updateAchievement(parsedId, body);
@@ -151,8 +169,7 @@ export class AchievementController {
   @ApiNotFoundResponse({ description: 'Achievement not found' })
   async delete(@Param('id') id: string) {
     if (!id) throw new BadRequestException('Invalid ID');
-    const parsedId = Number.parseInt(id, 10);
-    if (Number.isNaN(parsedId)) throw new BadRequestException('Invalid ID');
+    const parsedId = parsePositiveInt(id, 'Invalid ID');
 
     try {
       const deleted = await this.service.deleteAchievement(parsedId);

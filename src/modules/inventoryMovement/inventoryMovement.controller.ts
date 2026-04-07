@@ -21,6 +21,7 @@ import {
   ApiOkResponseList,
   ApiOkResponseMessage,
 } from '../../common/swagger/api-response.decorator';
+import { parsePositiveInt } from '../../common/validation/request-validation.util';
 
 
 import { InventoryMovementService } from './inventoryMovement.service';
@@ -64,8 +65,7 @@ export class InventoryMovementController {
   async getById(@Param('id') id: string) {
     if (!id) throw new BadRequestException('Invalid ID');
 
-    const parsedId = Number.parseInt(id, 10);
-    if (Number.isNaN(parsedId)) throw new BadRequestException('Invalid ID');
+    const parsedId = parsePositiveInt(id, 'Invalid ID');
 
     const movement = await this.service.getMovementById(parsedId);
     if (!movement) throw new NotFoundException('Inventory movement not found');
@@ -97,16 +97,12 @@ export class InventoryMovementController {
       } = {};
 
       if (campId) {
-        const parsedCampId = Number.parseInt(campId, 10);
-        if (Number.isNaN(parsedCampId)) throw new BadRequestException('Invalid camp ID');
+        const parsedCampId = parsePositiveInt(campId, 'Invalid camp ID');
         filters.campId = parsedCampId;
       }
 
       if (resourceTypeId) {
-        const parsedResourceTypeId = Number.parseInt(resourceTypeId, 10);
-        if (Number.isNaN(parsedResourceTypeId)) {
-          throw new BadRequestException('Invalid resource type ID');
-        }
+        const parsedResourceTypeId = parsePositiveInt(resourceTypeId, 'Invalid resource type ID');
         filters.resourceTypeId = parsedResourceTypeId;
       }
 
@@ -115,27 +111,16 @@ export class InventoryMovementController {
       }
 
       if (recordedBy) {
-        const parsedRecordedBy = Number.parseInt(recordedBy, 10);
-        if (Number.isNaN(parsedRecordedBy)) {
-          throw new BadRequestException('Invalid recordedBy');
-        }
+        const parsedRecordedBy = parsePositiveInt(recordedBy, 'Invalid recordedBy');
         filters.recordedBy = parsedRecordedBy;
       }
 
       if (page) {
-        const parsedPage = Number.parseInt(page, 10);
-        if (Number.isNaN(parsedPage) || parsedPage < 1) {
-          throw new BadRequestException('Invalid page');
-        }
-        filters.page = parsedPage;
+        filters.page = parsePositiveInt(page, 'Invalid page');
       }
 
       if (limit) {
-        const parsedLimit = Number.parseInt(limit, 10);
-        if (Number.isNaN(parsedLimit) || parsedLimit < 1) {
-          throw new BadRequestException('Invalid limit');
-        }
-        filters.limit = parsedLimit;
+        filters.limit = parsePositiveInt(limit, 'Invalid limit');
       }
 
       const result = await this.service.getAllMovements(filters);
@@ -168,8 +153,7 @@ export class InventoryMovementController {
   async update(@Param('id') id: string, @Body() body: UpdateInventoryMovementDTO) {
     if (!id) throw new BadRequestException('Invalid ID');
 
-    const parsedId = Number.parseInt(id, 10);
-    if (Number.isNaN(parsedId)) throw new BadRequestException('Invalid ID');
+    const parsedId = parsePositiveInt(id, 'Invalid ID');
 
     try {
       const movement = await this.service.updateMovement(parsedId, body);
@@ -195,8 +179,7 @@ export class InventoryMovementController {
   async delete(@Param('id') id: string) {
     if (!id) throw new BadRequestException('Invalid ID');
 
-    const parsedId = Number.parseInt(id, 10);
-    if (Number.isNaN(parsedId)) throw new BadRequestException('Invalid ID');
+    const parsedId = parsePositiveInt(id, 'Invalid ID');
 
     try {
       const deleted = await this.service.deleteMovement(parsedId);
