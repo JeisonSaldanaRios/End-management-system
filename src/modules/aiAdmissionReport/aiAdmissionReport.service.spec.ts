@@ -113,6 +113,18 @@ describe('AiAdmissionReportService', () => {
     expect(notificationService.notifyCampRoles).not.toHaveBeenCalled();
   });
 
+  it('returns repository values for the basic getter methods', async () => {
+    repository.findById.mockResolvedValue(report);
+    repository.findByRequestId.mockResolvedValue(report);
+    repository.findReportCampId.mockResolvedValue(8);
+    repository.findAdmissionRequestCampId.mockResolvedValue(4);
+
+    await expect(service.getReportById(99)).resolves.toEqual(report);
+    await expect(service.getReportByRequestId(10)).resolves.toEqual(report);
+    await expect(service.getReportCampId(99)).resolves.toBe(8);
+    await expect(service.getAdmissionRequestCampId(10)).resolves.toBe(4);
+  });
+
   it('maps pagination and optional filters in getAllReports', async () => {
     repository.findAllAndCount.mockResolvedValue({ data: [report], total: 1 });
 
@@ -189,6 +201,18 @@ describe('AiAdmissionReportService', () => {
     });
   });
 
+  it('updates report without notification when camp id cannot be resolved', async () => {
+    repository.findById.mockResolvedValue(report);
+    repository.update.mockResolvedValue({ ...report, aiDecision: 'REJECT' });
+    repository.findAdmissionRequestCampId.mockResolvedValue(null);
+
+    await expect(service.updateReport(99, { aiDecision: 'REJECT' })).resolves.toMatchObject({
+      aiDecision: 'REJECT',
+    });
+
+    expect(notificationService.notifyCampRoles).not.toHaveBeenCalled();
+  });
+
   it('returns false in deleteReport when target does not exist', async () => {
     repository.findById.mockResolvedValue(null);
 
@@ -217,5 +241,15 @@ describe('AiAdmissionReportService', () => {
       sourceId: 99,
       sendEmail: false,
     });
+  });
+
+  it('deletes report without notification when camp id cannot be resolved', async () => {
+    repository.findById.mockResolvedValue(report);
+    repository.delete.mockResolvedValue(true);
+    repository.findAdmissionRequestCampId.mockResolvedValue(null);
+
+    await expect(service.deleteReport(10)).resolves.toBe(true);
+
+    expect(notificationService.notifyCampRoles).not.toHaveBeenCalled();
   });
 });

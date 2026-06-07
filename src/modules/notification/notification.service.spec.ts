@@ -134,6 +134,26 @@ describe('NotificationService', () => {
       expect(repository.findActiveUsersByCampAndRoles).toHaveBeenCalledWith(1, ['SYSTEM_ADMIN']);
       expect(repository.create).toHaveBeenCalledTimes(2);
     });
+
+    it('returns the preferred notification when preferredUserId matches a recipient', async () => {
+      repository.findActiveUsersByCampAndRoles.mockResolvedValue([{ id: 11 }, { id: 12 }]);
+      repository.create
+        .mockResolvedValueOnce({ id: 200, campId: 1, userId: 11, targetRole: 'SYSTEM_ADMIN' })
+        .mockResolvedValueOnce({ id: 201, campId: 1, userId: 12, targetRole: 'SYSTEM_ADMIN' });
+
+      const result = await service.createNotification(
+        {
+          campId: 1,
+          targetRole: 'SYSTEM_ADMIN',
+          type: 'ADMISSION_REQUEST_PENDING',
+          title: 'New request',
+          message: 'There is a new request',
+        },
+        12,
+      );
+
+      expect(result).toMatchObject({ id: 201, userId: 12 });
+    });
   });
 
   // ─── getNotificationById ─────────────────────────────────────────────────
@@ -342,6 +362,41 @@ describe('NotificationService', () => {
       });
 
       expect(emailOutboxService.enqueue).toHaveBeenCalledTimes(1);
+    });
+
+    it('merges source metadata into the notification email payload', async () => {
+      repository.findUserById.mockResolvedValue({ id: 5, campId: 1, email: 'u@test.com' });
+      repository.create.mockResolvedValue({ id: 1 });
+      emailOutboxService.enqueue.mockResolvedValue(undefined);
+
+      await service.notifyUser(5, {
+        campId: 1,
+        type: 'INVENTORY_ALERT',
+        title: 'Stock Alert',
+        message: 'Critical low',
+        sourceType: 'inventory',
+        sourceId: 77,
+        sendEmail: true,
+        email: {
+          subject: 'Custom subject',
+          templateKey: 'custom_template',
+          payload: { custom: 'value' },
+        },
+      });
+
+      expect(emailOutboxService.enqueue).toHaveBeenCalledWith(
+        expect.objectContaining({
+          subject: 'Custom subject',
+          templateKey: 'custom_template',
+          payload: expect.objectContaining({
+            title: 'Stock Alert',
+            message: 'Critical low',
+            sourceType: 'inventory',
+            sourceId: 77,
+            custom: 'value',
+          }),
+        }),
+      );
     });
 
     it('sends email by default for ADMISSION_REQUEST_PENDING type', async () => {

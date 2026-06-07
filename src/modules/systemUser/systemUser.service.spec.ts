@@ -139,6 +139,16 @@ describe('UserService', () => {
     });
   });
 
+  describe('findUserByUsername', () => {
+    it('delegates to repository with username and campId', async () => {
+      userRepo.findByUsername.mockResolvedValue(ACTIVE_USER);
+
+      await expect(service.findUserByUsername('jperez', 1)).resolves.toEqual(ACTIVE_USER);
+
+      expect(userRepo.findByUsername).toHaveBeenCalledWith('jperez', 1);
+    });
+  });
+
   // ─── login ───────────────────────────────────────────────────────────────
 
   describe('login', () => {
@@ -209,6 +219,23 @@ describe('UserService', () => {
         expect.any(Date),
       );
     });
+
+    it('notifies user and camp admins when status changes', async () => {
+      userRepo.findById.mockResolvedValue(ACTIVE_USER);
+      userRepo.update.mockResolvedValue({ ...ACTIVE_USER, status: 'INACTIVE' });
+
+      await service.updateUser(1, { status: 'INACTIVE' });
+
+      expect(notificationService.notifyUser).toHaveBeenCalledWith(
+        ACTIVE_USER.id,
+        expect.objectContaining({ type: 'USER_STATUS_UPDATED' }),
+      );
+      expect(notificationService.notifyCampRoles).toHaveBeenCalledWith(
+        ACTIVE_USER.campId,
+        ['SYSTEM_ADMIN'],
+        expect.objectContaining({ type: 'USER_STATUS_UPDATED' }),
+      );
+    });
   });
 
   // ─── deleteUser ──────────────────────────────────────────────────────────
@@ -261,6 +288,13 @@ describe('UserService', () => {
 
       expect(result).toMatchObject({ role: 'RESOURCE_MANAGEMENT' });
       expect(authRepository.closeActiveSessionsByUser).toHaveBeenCalledTimes(1);
+    });
+
+    it('returns null when repository update fails', async () => {
+      userRepo.findById.mockResolvedValue(ACTIVE_USER);
+      userRepo.update.mockResolvedValue(null);
+
+      await expect(service.changeUserRole(1, 'RESOURCE_MANAGEMENT')).resolves.toBeNull();
     });
   });
 

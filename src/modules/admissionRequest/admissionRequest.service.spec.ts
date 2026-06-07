@@ -1,4 +1,8 @@
 import { AdmissionRequestService } from './admissionRequest.service';
+import { EncryptionService } from '../../services/encryption.service';
+import { OccupationEntity } from '../occupation/occupation.entity';
+import { PersonEntity } from '../person/person.entity';
+import { UserEntity } from '../systemUser/systemUser.entity';
 
 // ─── Mocks ───────────────────────────────────────────────────────────────────
 
@@ -20,12 +24,23 @@ const repository = {
 };
 
 const dataSource = {
-  getRepository: jest.fn().mockReturnValue({
-    findOne: jest.fn().mockResolvedValue(null),
-    findOneOrFail: jest.fn(),
-    save: jest.fn(),
-    create: jest.fn().mockImplementation((data: unknown) => data),
-  }),
+  getRepository: jest.fn(),
+};
+
+const occupationRepo = {
+  findOne: jest.fn(),
+};
+
+const personRepo = {
+  findOne: jest.fn(),
+  save: jest.fn(),
+  create: jest.fn().mockImplementation((data: unknown) => data),
+};
+
+const userRepo = {
+  findOne: jest.fn(),
+  save: jest.fn(),
+  create: jest.fn().mockImplementation((data: unknown) => data),
 };
 
 const decisionTreeService = {
@@ -84,7 +99,27 @@ describe('AdmissionRequestService', () => {
   let service: AdmissionRequestService;
 
   beforeEach(() => {
+    jest.clearAllMocks();
     systemTimeService.now.mockReturnValue(new Date(NOW));
+    dataSource.getRepository.mockImplementation((entity: typeof OccupationEntity) => {
+      if (entity === OccupationEntity) {
+        return occupationRepo;
+      }
+
+      if (entity === PersonEntity) {
+        return personRepo;
+      }
+
+      if (entity === UserEntity) {
+        return userRepo;
+      }
+
+      return {
+        findOne: jest.fn(),
+        save: jest.fn(),
+        create: jest.fn(),
+      };
+    });
     service = new AdmissionRequestService(
       repository as never,
       dataSource as never,
@@ -151,6 +186,62 @@ describe('AdmissionRequestService', () => {
       expect(repository.update).toHaveBeenCalledWith(
         BASE_REQUEST.id,
         expect.objectContaining({ status: 'PENDING_ADMIN', suggestedOccupationId: 5 }),
+      );
+    });
+
+    it('auto-approves and provisions access when AI says AUTO_APPROVE', async () => {
+      repository.findByEmailAndCamp.mockResolvedValue(null);
+      repository.create.mockResolvedValue(BASE_REQUEST);
+      repository.findOccupationByName.mockResolvedValue({ id: 11, name: 'Scout' });
+      repository.saveAiAdmissionReport.mockResolvedValue(undefined);
+      repository.update.mockResolvedValue({
+        ...BASE_REQUEST,
+        status: 'APPROVED',
+        finalOccupationId: 11,
+        reviewDate: NOW,
+      });
+      occupationRepo.findOne.mockResolvedValue({ id: 11, name: 'Scout', description: 'Scout' });
+      personRepo.findOne.mockResolvedValue(null);
+      personRepo.save.mockResolvedValue({ id: 77 });
+      userRepo.findOne.mockResolvedValue(null);
+      userRepo.save.mockResolvedValue({ id: 88 });
+      jest.spyOn(EncryptionService, 'hashPassword').mockResolvedValue('hashed-password');
+
+      decisionTreeService.explainByModelName.mockResolvedValue({
+        prediction: 'ACCEPT',
+        decisionAction: 'AUTO_APPROVE',
+        rules: ['age > 18'],
+        explanation: {
+          admissionSummary: 'Accepted',
+          admissionReason: 'Strong profile',
+          roleSummary: 'Role fit',
+        },
+        roleAssignment: {
+          suggestedRole: 'Explorador',
+          mappedOccupationName: 'Scout',
+          rules: [],
+          summary: 'Role ok',
+          reason: 'Good fit',
+          recommendedAttributes: ['strong'],
+        },
+      });
+
+      const result = await service.createRequest({ ...BASE_REQUEST });
+
+      expect(result.status).toBe('APPROVED');
+      expect(repository.update).toHaveBeenCalledWith(
+        BASE_REQUEST.id,
+        expect.objectContaining({
+          status: 'APPROVED',
+          finalOccupationId: 11,
+          reviewDate: NOW,
+        }),
+      );
+      expect(userRepo.save).toHaveBeenCalled();
+      expect(notificationService.notifyCampRoles).toHaveBeenCalledWith(
+        1,
+        ['SYSTEM_ADMIN'],
+        expect.objectContaining({ type: 'ADMISSION_REQUEST_APPROVED' }),
       );
     });
   });
@@ -375,6 +466,45 @@ describe('AdmissionRequestService', () => {
         }),
       );
     });
+
+    it('approves the request and creates access with the final role', async () => {
+      repository.findById.mockResolvedValue({
+        ...BASE_REQUEST,
+        status: 'PENDING_ADMIN',
+        suggestedOccupationId: 10,
+      });
+      repository.findApprovedByEmailExcludingId.mockResolvedValue(null);
+      repository.update.mockResolvedValue({
+        ...BASE_REQUEST,
+        status: 'APPROVED',
+        finalOccupationId: 10,
+        reviewedBy: 5,
+      });
+      occupationRepo.findOne.mockResolvedValue({ id: 10, name: 'Scout', description: 'Scout' });
+      personRepo.findOne.mockResolvedValue(null);
+      personRepo.save.mockResolvedValue({ id: 77 });
+      userRepo.findOne.mockResolvedValue(null);
+      userRepo.save.mockResolvedValue({ id: 88 });
+      jest.spyOn(EncryptionService, 'hashPassword').mockResolvedValue('hashed-password');
+
+      const result = await service.reviewByAdmin(1, 5, true, 10, 'WORKER');
+
+      expect(result.status).toBe('APPROVED');
+      expect(repository.update).toHaveBeenCalledWith(
+        1,
+        expect.objectContaining({
+          reviewedBy: 5,
+          status: 'APPROVED',
+          finalOccupationId: 10,
+        }),
+      );
+      expect(userRepo.save).toHaveBeenCalled();
+      expect(notificationService.notifyCampRoles).toHaveBeenCalledWith(
+        1,
+        ['SYSTEM_ADMIN'],
+        expect.objectContaining({ type: 'ADMISSION_REQUEST_APPROVED' }),
+      );
+    });
   });
 
   // ─── getPendingByCamp ────────────────────────────────────────────────────
@@ -411,6 +541,49 @@ describe('AdmissionRequestService', () => {
         physical_condition_score: expect.any(Number),
         experience_years: expect.any(Number),
         skills_score: expect.any(Number),
+      });
+    });
+  });
+
+  describe('uploadAdmissionRequestPhoto', () => {
+    it('replaces the previous image and stores the new one', async () => {
+      repository.findById.mockResolvedValue({
+        ...BASE_REQUEST,
+        photoUrl: 'old/photo.jpg',
+      });
+      storageService.deleteImage.mockResolvedValue(undefined);
+      storageService.uploadImage.mockResolvedValue('new/photo.jpg');
+      repository.update.mockResolvedValue({
+        ...BASE_REQUEST,
+        photoUrl: 'new/photo.jpg',
+      });
+
+      const result = await service.uploadAdmissionRequestPhoto(1, {
+        originalname: 'photo.jpg',
+      } as Express.Multer.File);
+
+      expect(storageService.deleteImage).toHaveBeenCalledWith('old/photo.jpg');
+      expect(storageService.uploadImage).toHaveBeenCalledWith(
+        expect.objectContaining({ originalname: 'photo.jpg' }),
+        'admission-photos',
+      );
+      expect(result.photoUrl).toBe('new/photo.jpg');
+    });
+  });
+
+  describe('getAdmissionRequestWithSignedUrl', () => {
+    it('adds a signed url when the request has a photo', async () => {
+      repository.findById.mockResolvedValue({
+        ...BASE_REQUEST,
+        photoUrl: 'photo/path.jpg',
+      });
+      storageService.getSignedUrl.mockResolvedValue('signed/photo-url');
+
+      const result = await service.getAdmissionRequestWithSignedUrl(1);
+
+      expect(result).toMatchObject({
+        photoUrl: 'photo/path.jpg',
+        photoSignedUrl: 'signed/photo-url',
       });
     });
   });

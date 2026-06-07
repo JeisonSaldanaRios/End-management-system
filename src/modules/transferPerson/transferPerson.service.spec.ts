@@ -31,6 +31,12 @@ describe('TransferPersonService (scope assertions)', () => {
     );
   });
 
+  it('assertTransferCampAccess allows origin camp access', async () => {
+    repository.resolveTransferScope.mockResolvedValue({ originCampId: 1, destinationCampId: 2 });
+
+    await expect(service.assertTransferCampAccess(10, 1)).resolves.toBeUndefined();
+  });
+
   it('assertTransferPersonCampAccess throws NotFound when scope missing', async () => {
     repository.resolveTransferPersonScope.mockResolvedValue(null);
     await expect(service.assertTransferPersonCampAccess(99, 1)).rejects.toThrow(
@@ -46,6 +52,15 @@ describe('TransferPersonService (scope assertions)', () => {
     await expect(service.assertTransferPersonCampAccess(5, 3)).rejects.toThrow(
       'You can only access transfer persons involving your camp',
     );
+  });
+
+  it('assertTransferPersonCampAccess allows destination camp access', async () => {
+    repository.resolveTransferPersonScope.mockResolvedValue({
+      originCampId: 7,
+      destinationCampId: 8,
+    });
+
+    await expect(service.assertTransferPersonCampAccess(5, 8)).resolves.toBeUndefined();
   });
 });
 import type { TransferPersonRepository } from './transferPerson.repository';
@@ -196,6 +211,27 @@ describe('TransferPersonService', () => {
       expect(notificationService.notifyUser).toHaveBeenCalledWith(10, expect.any(Object));
       expect(transferService.syncTransferRations).toHaveBeenCalledWith(1);
     });
+
+    it('skips user notification when there is no linked user', async () => {
+      repository.findByTransferAndPerson.mockResolvedValue(null);
+      repository.create.mockResolvedValue({
+        id: 1,
+        transferId: 1,
+        personId: 1,
+        status: 'CONFIRMED',
+      } as never);
+      repository.resolveTransferScope.mockResolvedValue({ originCampId: 1, destinationCampId: 2 });
+      repository.findLinkedUserByPersonId.mockResolvedValue(null);
+
+      await service.createTransferPerson({
+        transferId: 1,
+        personId: 1,
+        status: 'CONFIRMED',
+      });
+
+      expect(notificationService.notifyCampRoles).toHaveBeenCalledTimes(2);
+      expect(notificationService.notifyUser).not.toHaveBeenCalled();
+    });
   });
 
   describe('updateTransferPerson', () => {
@@ -237,6 +273,28 @@ describe('TransferPersonService', () => {
 
       expect(result?.status).toBe('PENDING');
       expect(notificationService.notifyCampRoles).toHaveBeenCalledTimes(2);
+      expect(transferService.syncTransferRations).toHaveBeenCalledWith(1);
+    });
+
+    it('updates without sending notifications when status stays the same', async () => {
+      repository.findById.mockResolvedValue({
+        id: 1,
+        transferId: 1,
+        personId: 1,
+        status: 'CONFIRMED',
+      } as never);
+      repository.update.mockResolvedValue({
+        id: 1,
+        transferId: 1,
+        personId: 1,
+        status: 'CONFIRMED',
+      } as never);
+
+      await expect(service.updateTransferPerson(1, { status: 'CONFIRMED' } as any)).resolves.toMatchObject({
+        status: 'CONFIRMED',
+      });
+
+      expect(notificationService.notifyCampRoles).not.toHaveBeenCalled();
       expect(transferService.syncTransferRations).toHaveBeenCalledWith(1);
     });
   });
