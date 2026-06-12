@@ -125,7 +125,7 @@ export class PersonController {
   }
 
   @Get()
-  @Roles('SYSTEM_ADMIN')
+  @Roles('SYSTEM_ADMIN', 'RESOURCE_MANAGEMENT', 'TRAVEL_MANAGER')
   @ApiOperation({ summary: 'List Person' })
   @ApiOkResponseList(PersonEntity, { description: 'Person list' })
   @ApiBadRequestResponse({ description: 'Invalid query parameters' })
