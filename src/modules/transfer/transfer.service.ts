@@ -120,11 +120,16 @@ export class TransferService {
       throw new BadRequestException('No hay recurso FOOD configurado para raciones del traslado');
     }
 
+    const committedAmount = this.toNumber(
+      await this.repository.getCommittedRationsForCamp(supplierCampId, transfer.id),
+    );
+
     const currentAmount = this.toNumber(rationInventory.currentAmount);
     const minimumAmount = this.toNumber(rationInventory.minimumAlertAmount);
-    const remainingAmount = currentAmount - rationsForTrip;
+    const availableAmount = currentAmount - committedAmount;
+    const remainingAmount = availableAmount - rationsForTrip;
 
-    if (currentAmount < rationsForTrip) {
+    if (availableAmount < rationsForTrip) {
       throw new BadRequestException('Inventario insuficiente de raciones para ejecutar el traslado');
     }
 
@@ -171,18 +176,10 @@ export class TransferService {
     resourceTypeId: number,
     amount: string,
   ): Promise<void> {
-    const rows = (await this.dataSource.query(
-      `SELECT current_amount::text AS current_amount,
-              minimum_alert_amount::text AS minimum_alert_amount
-       FROM public.camp_inventory
-       WHERE camp_id = $1
-         AND resource_type_id = $2
-       LIMIT 1`,
-      [campId, resourceTypeId],
-    )) as Array<{ current_amount: string; minimum_alert_amount: string }>;
+    const inventory = await this.repository.getCampInventoryAmounts(campId, resourceTypeId);
 
-    const currentAmount = this.toNumber(rows[0]?.current_amount);
-    const minimumAmount = this.toNumber(rows[0]?.minimum_alert_amount);
+    const currentAmount = this.toNumber(inventory?.currentAmount);
+    const minimumAmount = this.toNumber(inventory?.minimumAlertAmount);
     const consumedAmount = this.toNumber(amount);
 
     if (currentAmount < consumedAmount) {
@@ -194,11 +191,40 @@ export class TransferService {
     }
   }
 
+  private async ensureDeliveredResourcesFromRequest(
+    transferId: number,
+    requestId: number,
+  ): Promise<void> {
+    const existing = await this.repository.findDeliveredResourcesByTransferId(transferId);
+    if (existing.length > 0) {
+      return;
+    }
+
+    const resourceRows = await this.repository.getRequestResourceDetails(requestId);
+
+    for (const row of resourceRows) {
+      const alreadyExists = await this.repository.findDeliveredResourceByTransferAndType(
+        transferId,
+        row.resourceTypeId,
+      );
+
+      if (!alreadyExists) {
+        await this.repository.insertDeliveredTransferResource(
+          transferId,
+          row.resourceTypeId,
+          row.amount,
+        );
+      }
+    }
+  }
+
   private async applyTransferSentInventory(
     transferId: number,
     requestId: number,
     actorUserId: number,
   ): Promise<void> {
+    await this.ensureDeliveredResourcesFromRequest(transferId, requestId);
+
     const alreadyApplied = await this.repository.countAppliedTransferSentMovements(transferId);
     if (alreadyApplied > 0) {
       return;
@@ -233,6 +259,8 @@ export class TransferService {
     requestId: number,
     actorUserId: number,
   ): Promise<void> {
+    await this.ensureDeliveredResourcesFromRequest(transferId, requestId);
+
     const alreadyApplied = await this.repository.countAppliedTransferReceivedMovements(transferId);
     if (alreadyApplied > 0) {
       return;
@@ -558,20 +586,12 @@ export class TransferService {
       throw new BadRequestException('No hay recurso FOOD configurado para raciones del traslado');
     }
 
-    const committedRows = (await this.dataSource.query(
-      `SELECT COALESCE(SUM(t.rations_for_trip), 0)::text AS total
-       FROM public.transfer t
-       INNER JOIN public.intercamp_request r ON r.id = t.request_id
-       WHERE r.destination_camp_id = $1
-         AND r.status = 'APPROVED'
-         AND t.status = 'PENDING_DEPARTURE'
-         AND t.id <> $2`,
-      [supplierCampId, transfer.id],
-    )) as Array<{ total: string }>;
+    const committedAmount = this.toNumber(
+      await this.repository.getCommittedRationsForCamp(supplierCampId, transfer.id),
+    );
 
     const currentAmount = this.toNumber(rationInventory.currentAmount);
     const minimumAmount = this.toNumber(rationInventory.minimumAlertAmount);
-    const committedAmount = this.toNumber(committedRows[0]?.total);
     const requiredAmount = this.toNumber(rationsForTrip);
     const availableAmount = currentAmount - committedAmount;
 
@@ -614,18 +634,11 @@ export class TransferService {
 
     const scope = await this.resolveRequestScope(existing.requestId);
     const supplierCampId = scope.destinationCampId;
-    const people = (await this.dataSource.query(
-      `SELECT p.id, p.camp_id, p.current_status, o.name AS occupation_name
-       FROM public.person p
-       LEFT JOIN public.occupation o ON o.id = p.occupation_id
-       WHERE p.id = ANY($1::int[])`,
-      [uniquePersonIds],
-    )) as Array<{
-      id: number;
-      camp_id: number;
-      current_status: string;
-      occupation_name: string | null;
-    }>;
+
+    const people = await this.repository.getTransportStaffForTransfer(
+      uniquePersonIds,
+      supplierCampId,
+    );
 
     if (people.length !== uniquePersonIds.length) {
       throw new BadRequestException('Una o mas personas operativas no existen');
@@ -645,29 +658,8 @@ export class TransferService {
       throw new BadRequestException('Debe asignar al menos una persona operativa con oficio Scout');
     }
 
-    const busyRows = (await this.dataSource.query(
-      `SELECT DISTINCT assigned.person_id
-       FROM (
-         SELECT tp.person_id
-         FROM public.transfer_person tp
-         INNER JOIN public.transfer t ON t.id = tp.transfer_id
-         WHERE tp.person_id = ANY($1::int[])
-           AND tp.transfer_id <> $2
-           AND tp.status <> 'CANCELED'
-           AND t.status IN ('PENDING_DEPARTURE', 'IN_TRANSIT')
-         UNION
-         SELECT trp.person_id
-         FROM public.transfer_requested_person trp
-         INNER JOIN public.transfer t ON t.id = trp.transfer_id
-         WHERE trp.person_id = ANY($1::int[])
-           AND trp.transfer_id <> $2
-           AND trp.status <> 'CANCELED'
-           AND t.status IN ('PENDING_DEPARTURE', 'IN_TRANSIT')
-       ) assigned`,
-      [uniquePersonIds, id],
-    )) as Array<{ person_id: number }>;
-
-    if (busyRows.length > 0) {
+    const busyPersonIds = await this.repository.findBusyPersonIds(uniquePersonIds, id);
+    if (busyPersonIds.length > 0) {
       throw new BadRequestException(
         'Una o mas personas operativas ya estan asignadas a otro traslado activo',
       );
@@ -679,66 +671,13 @@ export class TransferService {
       uniquePersonIds.length,
     );
 
-    const queryRunner = this.dataSource.createQueryRunner();
-    await queryRunner.connect();
-    await queryRunner.startTransaction();
-
     try {
-      const lockedRows = (await queryRunner.query(
-        `SELECT id
-         FROM public.transfer
-         WHERE id = $1
-           AND status = 'PENDING_DEPARTURE'
-         FOR UPDATE`,
-        [id],
-      )) as Array<{ id: number }>;
-
-      if (lockedRows.length === 0) {
+      await this.repository.replaceTransportStaff(id, uniquePersonIds, rationsForTrip);
+    } catch (error) {
+      if (error instanceof Error && error.message === 'LOCK_FAILED') {
         throw new BadRequestException('Solo se puede editar personal operativo antes de la salida');
       }
-
-      await queryRunner.query(
-        `UPDATE public.transfer_person
-         SET status = 'CANCELED', departure_date = NULL, arrival_date = NULL
-         WHERE transfer_id = $1
-           AND person_id <> ALL($2::int[])
-           AND status <> 'CANCELED'`,
-        [id, uniquePersonIds],
-      );
-
-      for (const personId of uniquePersonIds) {
-        const updatedRows = (await queryRunner.query(
-          `UPDATE public.transfer_person
-           SET status = 'CONFIRMED', departure_date = NULL, arrival_date = NULL
-           WHERE transfer_id = $1
-             AND person_id = $2
-           RETURNING id`,
-          [id, personId],
-        )) as Array<{ id: number }>;
-
-        if (updatedRows.length === 0) {
-          await queryRunner.query(
-            `INSERT INTO public.transfer_person (transfer_id, person_id, status, departure_date, arrival_date)
-             VALUES ($1, $2, 'CONFIRMED', NULL, NULL)`,
-            [id, personId],
-          );
-        }
-      }
-
-      await queryRunner.query(
-        `UPDATE public.transfer
-         SET rations_for_trip = $2,
-             updated_at = NOW()
-         WHERE id = $1`,
-        [id, rationsForTrip],
-      );
-
-      await queryRunner.commitTransaction();
-    } catch (error) {
-      await queryRunner.rollbackTransaction();
       throw error;
-    } finally {
-      await queryRunner.release();
     }
 
     const updated = await this.repository.findById(id);
@@ -767,6 +706,7 @@ export class TransferService {
 
     return updated;
   }
+
   async deleteTransfer(id: number): Promise<boolean> {
     const existing = await this.repository.findById(id);
     if (!existing) {

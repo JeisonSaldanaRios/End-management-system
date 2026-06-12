@@ -45,7 +45,8 @@ export class TransferRepository {
   }
 
   async countTransferPeople(transferId: number): Promise<number> {
-    const transportStaffCount = await this.repo.manager.getRepository(TransferPersonEntity)
+    const transportStaffCount = await this.repo.manager
+      .getRepository(TransferPersonEntity)
       .createQueryBuilder('tp')
       .where('tp.transferId = :transferId', { transferId })
       .andWhere('tp.status <> :canceled', { canceled: 'CANCELED' })
@@ -63,7 +64,8 @@ export class TransferRepository {
   }
 
   async countTransferTransportStaff(transferId: number): Promise<number> {
-    return await this.repo.manager.getRepository(TransferPersonEntity)
+    return await this.repo.manager
+      .getRepository(TransferPersonEntity)
       .createQueryBuilder('tp')
       .where('tp.transferId = :transferId', { transferId })
       .andWhere('tp.status <> :canceled', { canceled: 'CANCELED' })
@@ -133,6 +135,209 @@ export class TransferRepository {
     };
   }
 
+  async getCommittedRationsForCamp(campId: number, excludeTransferId: number): Promise<string> {
+    const rows = (await this.repo.query(
+      `SELECT COALESCE(SUM(t.rations_for_trip), 0)::text AS total
+       FROM public.transfer t
+       INNER JOIN public.intercamp_request r ON r.id = t.request_id
+       WHERE r.destination_camp_id = $1
+         AND r.status = 'APPROVED'
+         AND t.status = 'PENDING_DEPARTURE'
+         AND t.id <> $2`,
+      [campId, excludeTransferId],
+    )) as Array<{ total: string }>;
+
+    return rows[0]?.total ?? '0';
+  }
+
+  async getCampInventoryAmounts(
+    campId: number,
+    resourceTypeId: number,
+  ): Promise<{ currentAmount: string; minimumAlertAmount: string } | null> {
+    const rows = (await this.repo.query(
+      `SELECT current_amount::text AS current_amount,
+              minimum_alert_amount::text AS minimum_alert_amount
+       FROM public.camp_inventory
+       WHERE camp_id = $1
+         AND resource_type_id = $2
+       LIMIT 1`,
+      [campId, resourceTypeId],
+    )) as Array<{ current_amount: string; minimum_alert_amount: string }>;
+
+    const row = rows[0];
+    if (!row) return null;
+
+    return {
+      currentAmount: row.current_amount,
+      minimumAlertAmount: row.minimum_alert_amount,
+    };
+  }
+
+  async getRequestResourceDetails(
+    requestId: number,
+  ): Promise<Array<{ resourceTypeId: number; amount: string }>> {
+    const rows = (await this.repo.query(
+      `SELECT resource_type_id,
+              COALESCE(approved_amount, requested_amount)::text AS amount
+       FROM public.request_resource_detail
+       WHERE request_id = $1`,
+      [requestId],
+    )) as Array<{ resource_type_id: number; amount: string }>;
+
+    return rows.map((row) => ({
+      resourceTypeId: row.resource_type_id,
+      amount: row.amount,
+    }));
+  }
+
+  async findDeliveredResourceByTransferAndType(
+    transferId: number,
+    resourceTypeId: number,
+  ): Promise<boolean> {
+    const rows = (await this.repo.query(
+      `SELECT 1
+       FROM public.delivered_transfer_resource
+       WHERE transfer_id = $1
+         AND resource_type_id = $2
+       LIMIT 1`,
+      [transferId, resourceTypeId],
+    )) as unknown[];
+
+    return rows.length > 0;
+  }
+
+  async insertDeliveredTransferResource(
+    transferId: number,
+    resourceTypeId: number,
+    amount: string,
+  ): Promise<void> {
+    await this.repo.query(
+      `INSERT INTO public.delivered_transfer_resource
+         (transfer_id, resource_type_id, sent_amount, received_amount)
+       VALUES ($1, $2, $3, $3)`,
+      [transferId, resourceTypeId, amount],
+    );
+  }
+
+  async getTransportStaffForTransfer(
+    personIds: number[],
+    supplierCampId: number,
+  ): Promise<
+    Array<{
+      id: number;
+      camp_id: number;
+      current_status: string;
+      occupation_name: string | null;
+    }>
+  > {
+    return (await this.repo.query(
+      `SELECT p.id, p.camp_id, p.current_status, o.name AS occupation_name
+       FROM public.person p
+       LEFT JOIN public.occupation o ON o.id = p.occupation_id
+       WHERE p.id = ANY($1::int[])`,
+      [personIds],
+    )) as Array<{
+      id: number;
+      camp_id: number;
+      current_status: string;
+      occupation_name: string | null;
+    }>;
+  }
+
+  async findBusyPersonIds(personIds: number[], excludeTransferId: number): Promise<number[]> {
+    const rows = (await this.repo.query(
+      `SELECT DISTINCT assigned.person_id
+       FROM (
+         SELECT tp.person_id
+         FROM public.transfer_person tp
+         INNER JOIN public.transfer t ON t.id = tp.transfer_id
+         WHERE tp.person_id = ANY($1::int[])
+           AND tp.transfer_id <> $2
+           AND tp.status <> 'CANCELED'
+           AND t.status IN ('PENDING_DEPARTURE', 'IN_TRANSIT')
+         UNION
+         SELECT trp.person_id
+         FROM public.transfer_requested_person trp
+         INNER JOIN public.transfer t ON t.id = trp.transfer_id
+         WHERE trp.person_id = ANY($1::int[])
+           AND trp.transfer_id <> $2
+           AND trp.status <> 'CANCELED'
+           AND t.status IN ('PENDING_DEPARTURE', 'IN_TRANSIT')
+       ) assigned`,
+      [personIds, excludeTransferId],
+    )) as Array<{ person_id: number }>;
+
+    return rows.map((row) => row.person_id);
+  }
+
+  async replaceTransportStaff(
+    transferId: number,
+    personIds: number[],
+    rationsForTrip: string,
+  ): Promise<void> {
+    const queryRunner = this.repo.manager.connection.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
+    try {
+      const lockedRows = (await queryRunner.query(
+        `SELECT id
+         FROM public.transfer
+         WHERE id = $1
+           AND status = 'PENDING_DEPARTURE'
+         FOR UPDATE`,
+        [transferId],
+      )) as Array<{ id: number }>;
+
+      if (lockedRows.length === 0) {
+        throw new Error('LOCK_FAILED');
+      }
+
+      await queryRunner.query(
+        `UPDATE public.transfer_person
+         SET status = 'CANCELED', departure_date = NULL, arrival_date = NULL
+         WHERE transfer_id = $1
+           AND person_id <> ALL($2::int[])
+           AND status <> 'CANCELED'`,
+        [transferId, personIds],
+      );
+
+      for (const personId of personIds) {
+        const updatedRows = (await queryRunner.query(
+          `UPDATE public.transfer_person
+           SET status = 'CONFIRMED', departure_date = NULL, arrival_date = NULL
+           WHERE transfer_id = $1
+             AND person_id = $2
+           RETURNING id`,
+          [transferId, personId],
+        )) as Array<{ id: number }>;
+
+        if (updatedRows.length === 0) {
+          await queryRunner.query(
+            `INSERT INTO public.transfer_person (transfer_id, person_id, status, departure_date, arrival_date)
+             VALUES ($1, $2, 'CONFIRMED', NULL, NULL)`,
+            [transferId, personId],
+          );
+        }
+      }
+
+      await queryRunner.query(
+        `UPDATE public.transfer
+         SET rations_for_trip = $2,
+             updated_at = NOW()
+         WHERE id = $1`,
+        [transferId, rationsForTrip],
+      );
+
+      await queryRunner.commitTransaction();
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      throw error;
+    } finally {
+      await queryRunner.release();
+    }
+  }
+
   async setManifestInTransit(transferId: number, departureDate: Date): Promise<void> {
     await this.repo.manager.transaction(async (manager) => {
       await manager.query(
@@ -167,11 +372,7 @@ export class TransferRepository {
     });
   }
 
-  async completeManifest(
-    transferId: number,
-    requestId: number,
-    arrivalDate: Date,
-  ): Promise<void> {
+  async completeManifest(transferId: number, requestId: number, arrivalDate: Date): Promise<void> {
     const scope = await this.resolveRequestScope(requestId);
     if (!scope) return;
 
@@ -326,6 +527,7 @@ export class TransferRepository {
 
     return rows[0]?.total ?? 0;
   }
+
   async findDeliveredResourcesByTransferId(transferId: number): Promise<
     Array<{
       id: number;
