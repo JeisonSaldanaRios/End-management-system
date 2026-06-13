@@ -390,7 +390,10 @@ describe('AdmissionRequestService', () => {
       repository.findApprovedByEmailExcludingId.mockResolvedValue(null);
       repository.update.mockResolvedValue({ ...BASE_REQUEST, status: 'APPROVED' });
       const userRepoMock = {
-        findOne: jest.fn().mockResolvedValue({ id: 123, requestId: 1 }),
+        findOne: jest.fn().mockImplementation((args: any) => {
+          if (args?.where?.username) return Promise.resolve(null);
+          return Promise.resolve({ id: 123, requestId: 1 });
+        }),
         create: jest.fn().mockImplementation((data: unknown) => data),
         save: jest.fn().mockResolvedValue({}),
       };
