@@ -85,4 +85,6 @@ jobs:
         run: npm run build
 
       - name: Test
-        run: npm test -- --runInBand
+        env:
+          NODE_OPTIONS: "--max-old-space-size=3072"
+        run: npm test -- --runInBand --forceExit
