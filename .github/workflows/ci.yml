@@ -87,4 +87,4 @@ jobs:
       - name: Test
         env:
           NODE_OPTIONS: "--max-old-space-size=4096 --expose-gc"
-        run: npm test -- --runInBand --forceExit
+        run: npm test -- --maxWorkers=1 --forceExit
