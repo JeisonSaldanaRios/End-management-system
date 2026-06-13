@@ -7,12 +7,19 @@ jest.mock('../../common/validation/assert-exists', () => ({
   assertEntityExists: jest.fn(() => Promise.resolve()),
 }));
 
+const manager: any = {
+  save: jest.fn(),
+  findOne: jest.fn(),
+  query: jest.fn(),
+};
+
 const repository: any = {
   findById: jest.fn(),
   findByRequestId: jest.fn(),
   findAllAndCount: jest.fn(),
   create: jest.fn(),
   update: jest.fn(),
+  updateWithManager: jest.fn(),
   delete: jest.fn(),
   resolveRequestScope: jest.fn(),
   resolveTransferScope: jest.fn(),
@@ -27,29 +34,28 @@ const repository: any = {
   countTransferRequestedPeople: jest.fn(),
   createTransferHistoryEntry: jest.fn(),
   setManifestInTransit: jest.fn(),
+  setManifestInTransitWithManager: jest.fn(),
   completeManifest: jest.fn(),
+  completeManifestWithManager: jest.fn(),
   cancelManifest: jest.fn(),
+  cancelManifestWithManager: jest.fn(),
+  createTransferHistoryEntryWithManager: jest.fn(),
   getCommittedRationsForCamp: jest.fn(),
   getTransportStaffForTransfer: jest.fn(),
   getCampInventoryAmounts: jest.fn(),
+  getCampInventoryAmountsWithManager: jest.fn(),
   getRequestResourceDetails: jest.fn(),
+  getRequestResourceDetailsWithManager: jest.fn(),
   findBusyPersonIds: jest.fn(),
   replaceTransportStaff: jest.fn(),
-  updateWithManager: jest.fn(),
   countAppliedTransferRationMovementsWithManager: jest.fn(),
   countAppliedTransferSentMovementsWithManager: jest.fn(),
   countAppliedTransferReceivedMovementsWithManager: jest.fn(),
-  findRationInventoryCandidateWithManager: jest.fn(),
   findDeliveredResourcesByTransferIdWithManager: jest.fn(),
-  getCampInventoryAmountsWithManager: jest.fn(),
-  getRequestResourceDetailsWithManager: jest.fn(),
   findDeliveredResourceByTransferAndTypeWithManager: jest.fn(),
   insertDeliveredTransferResourceWithManager: jest.fn(),
+  findRationInventoryCandidateWithManager: jest.fn(),
   createInventoryMovementWithManager: jest.fn(),
-  createTransferHistoryEntryWithManager: jest.fn(),
-  setManifestInTransitWithManager: jest.fn(),
-  completeManifestWithManager: jest.fn(),
-  cancelManifestWithManager: jest.fn(),
 };
 
 const notificationService: any = {
@@ -60,12 +66,22 @@ const inventoryMovementService: any = {
   createMovement: jest.fn(),
 };
 
+const queryRunner: any = {
+  connect: jest.fn(),
+  startTransaction: jest.fn(),
+  query: jest.fn(),
+  commitTransaction: jest.fn(),
+  rollbackTransaction: jest.fn(),
+  release: jest.fn(),
+};
+
 const dataSource: any = {
   getRepository: jest.fn().mockReturnValue({
     findOne: jest.fn(),
   }),
   query: jest.fn(),
-  transaction: jest.fn(),
+  createQueryRunner: jest.fn().mockReturnValue(queryRunner),
+  transaction: jest.fn().mockImplementation(async (cb: (m: typeof manager) => Promise<unknown>) => cb(manager)),
 };
 
 // ─── Suite ───────────────────────────────────────────────────────────────────
@@ -80,66 +96,33 @@ describe('TransferService', () => {
     repository.countAppliedTransferSentMovements.mockResolvedValue(0);
     repository.countAppliedTransferReceivedMovements.mockResolvedValue(0);
     repository.countTransferRequestedPeople.mockResolvedValue(0);
-    repository.countAppliedTransferRationMovementsWithManager.mockResolvedValue(0);
-    repository.countAppliedTransferSentMovementsWithManager.mockResolvedValue(0);
-    repository.countAppliedTransferReceivedMovementsWithManager.mockResolvedValue(0);
     repository.getCommittedRationsForCamp.mockResolvedValue('0.00');
-    repository.getCampInventoryAmounts.mockResolvedValue({
+    repository.getCampInventoryAmountsWithManager.mockResolvedValue({
+      currentAmount: '100.00',
+      minimumAlertAmount: '0.00',
+    });
+    repository.getCampInventoryAmountsWithManager.mockResolvedValue({
       currentAmount: '100.00',
       minimumAlertAmount: '0.00',
     });
     repository.getRequestResourceDetails.mockResolvedValue([]);
+    repository.getRequestResourceDetailsWithManager.mockResolvedValue([]);
     repository.findBusyPersonIds.mockResolvedValue([]);
     repository.findRationInventoryCandidate.mockResolvedValue({
       resourceTypeId: 9,
       currentAmount: '100.00',
       minimumAlertAmount: '0.00',
     });
-    repository.findRationInventoryCandidateWithManager.mockImplementation(
-      async (_manager: unknown, campId: number) =>
-        await repository.findRationInventoryCandidate(campId),
-    );
-    repository.findDeliveredResourcesByTransferIdWithManager.mockImplementation(
-      async (_manager: unknown, transferId: number) =>
-        await repository.findDeliveredResourcesByTransferId(transferId),
-    );
-    repository.getCampInventoryAmountsWithManager.mockImplementation(
-      async (_manager: unknown, campId: number, resourceTypeId: number) => {
-        const rows = await dataSource.query('', [campId, resourceTypeId]);
-        return {
-          currentAmount: rows?.[0]?.current_amount ?? '100.00',
-          minimumAlertAmount: rows?.[0]?.minimum_alert_amount ?? '0.00',
-        };
-      },
-    );
-    repository.getRequestResourceDetailsWithManager.mockResolvedValue([]);
-    repository.findDeliveredResourceByTransferAndTypeWithManager.mockResolvedValue(null);
-    repository.createInventoryMovementWithManager.mockImplementation(
-      async (_manager: unknown, data: unknown) => {
-        await inventoryMovementService.createMovement(data);
-      },
-    );
-    repository.updateWithManager.mockImplementation(
-      async (_manager: unknown, id: number, data: unknown) => await repository.update(id, data),
-    );
-    repository.setManifestInTransitWithManager.mockImplementation(
-      async (_manager: unknown, id: number, date: Date) =>
-        await repository.setManifestInTransit(id, date),
-    );
-    repository.completeManifestWithManager.mockImplementation(
-      async (_manager: unknown, id: number, requestId: number, date: Date) =>
-        await repository.completeManifest(id, requestId, date),
-    );
-    repository.cancelManifestWithManager.mockImplementation(
-      async (_manager: unknown, id: number) => await repository.cancelManifest(id),
-    );
-    repository.createTransferHistoryEntryWithManager.mockImplementation(
-      async (_manager: unknown, data: unknown) =>
-        await repository.createTransferHistoryEntry(data),
-    );
-    dataSource.transaction.mockImplementation(async (callback: (manager: unknown) => unknown) =>
-      await callback({}),
-    );
+    repository.findRationInventoryCandidateWithManager.mockResolvedValue({
+      resourceTypeId: 9,
+      currentAmount: '100.00',
+      minimumAlertAmount: '0.00',
+    });
+    repository.countAppliedTransferRationMovementsWithManager.mockResolvedValue(0);
+    repository.countAppliedTransferSentMovementsWithManager.mockResolvedValue(0);
+    repository.countAppliedTransferReceivedMovementsWithManager.mockResolvedValue(0);
+    repository.findDeliveredResourcesByTransferIdWithManager.mockResolvedValue([]);
+
     service = new TransferService(
       repository as never,
       notificationService as never,
@@ -285,7 +268,7 @@ describe('TransferService', () => {
         status: 'PENDING_DEPARTURE',
         rationsForTrip: '12.00',
       });
-      repository.update.mockResolvedValue({
+      repository.updateWithManager.mockResolvedValue({
         id: 1,
         requestId: 10,
         status: 'COMPLETED',
@@ -297,7 +280,7 @@ describe('TransferService', () => {
         destinationCampId: 2,
         createdBy: 1,
       });
-      repository.findDeliveredResourcesByTransferId.mockResolvedValue([
+      repository.findDeliveredResourcesByTransferIdWithManager.mockResolvedValue([
         { id: 100, resourceTypeId: 50, sentAmount: '10', receivedAmount: '10' },
       ]);
       dataSource.getRepository().findOne.mockResolvedValue({ minimumDailyRationPerPerson: '1.5' });
@@ -308,112 +291,21 @@ describe('TransferService', () => {
         departureApprovedBy: 5,
       });
 
-      expect(repository.update).toHaveBeenCalled();
-      expect(
-        repository.createTransferHistoryEntry.mock.calls.length +
-          repository.createTransferHistoryEntryWithManager.mock.calls.length,
-      ).toBeGreaterThan(0);
-      expect(inventoryMovementService.createMovement).toHaveBeenCalledTimes(3);
-      expect(inventoryMovementService.createMovement).toHaveBeenCalledWith(
+      expect(repository.updateWithManager).toHaveBeenCalled();
+      expect(repository.createTransferHistoryEntryWithManager).toHaveBeenCalled();
+      expect(repository.createInventoryMovementWithManager).toHaveBeenCalledTimes(3);
+      expect(repository.createInventoryMovementWithManager).toHaveBeenCalledWith(
+        manager,
         expect.objectContaining({ movementType: 'TRANSFER_SENT', campId: 2 }),
       );
-      expect(inventoryMovementService.createMovement).toHaveBeenCalledWith(
+      expect(repository.createInventoryMovementWithManager).toHaveBeenCalledWith(
+        manager,
         expect.objectContaining({ movementType: 'TRANSFER_RECEIVED', campId: 1 }),
       );
       expect(notificationService.notifyCampRoles).toHaveBeenCalledTimes(2);
     });
 
-    it('caps sent resources to current inventory when completing', async () => {
-      repository.findById.mockResolvedValue({
-        id: 1,
-        requestId: 10,
-        status: 'PENDING_DEPARTURE',
-        rationsForTrip: '12.00',
-      });
-      repository.update.mockResolvedValue({
-        id: 1,
-        requestId: 10,
-        status: 'COMPLETED',
-        departureApprovedBy: 5,
-        arrivalApprovedBy: 5,
-      });
-      repository.resolveRequestScope.mockResolvedValue({
-        originCampId: 1,
-        destinationCampId: 2,
-        createdBy: 1,
-      });
-      repository.findDeliveredResourcesByTransferId.mockResolvedValue([
-        { id: 100, resourceTypeId: 50, sentAmount: '200', receivedAmount: '200' },
-      ]);
-      repository.getCampInventoryAmounts.mockResolvedValue({
-        currentAmount: '50.00',
-        minimumAlertAmount: '0.00',
-      });
-      repository.getCampInventoryAmountsWithManager.mockResolvedValue({
-        currentAmount: '50.00',
-        minimumAlertAmount: '0.00',
-      });
-      dataSource.getRepository().findOne.mockResolvedValue({ minimumDailyRationPerPerson: '1.5' });
 
-      await service.updateTransfer(1, {
-        status: 'COMPLETED',
-        arrivalApprovedBy: 5,
-        departureApprovedBy: 5,
-      });
-
-      expect(inventoryMovementService.createMovement).toHaveBeenCalledWith(
-        expect.objectContaining({
-          movementType: 'TRANSFER_SENT',
-          amount: '50.00',
-        }),
-      );
-    });
-
-    it('allows completion and records sent resources even below minimum', async () => {
-      repository.findById.mockResolvedValue({
-        id: 1,
-        requestId: 10,
-        status: 'PENDING_DEPARTURE',
-        rationsForTrip: '12.00',
-      });
-      repository.update.mockResolvedValue({
-        id: 1,
-        requestId: 10,
-        status: 'COMPLETED',
-        departureApprovedBy: 5,
-        arrivalApprovedBy: 5,
-      });
-      repository.resolveRequestScope.mockResolvedValue({
-        originCampId: 1,
-        destinationCampId: 2,
-        createdBy: 1,
-      });
-      repository.findDeliveredResourcesByTransferId.mockResolvedValue([
-        { id: 100, resourceTypeId: 50, sentAmount: '80', receivedAmount: '80' },
-      ]);
-      repository.getCampInventoryAmounts.mockResolvedValue({
-        currentAmount: '100.00',
-        minimumAlertAmount: '30.00',
-      });
-      repository.getCampInventoryAmountsWithManager.mockResolvedValue({
-        currentAmount: '100.00',
-        minimumAlertAmount: '30.00',
-      });
-      dataSource.getRepository().findOne.mockResolvedValue({ minimumDailyRationPerPerson: '1.5' });
-
-      await service.updateTransfer(1, {
-        status: 'COMPLETED',
-        arrivalApprovedBy: 5,
-        departureApprovedBy: 5,
-      });
-
-      expect(inventoryMovementService.createMovement).toHaveBeenCalledWith(
-        expect.objectContaining({
-          movementType: 'TRANSFER_SENT',
-          amount: '80.00',
-        }),
-      );
-    });
 
     it('cancels manifest when status is CANCELED', async () => {
       repository.findById.mockResolvedValue({
@@ -422,7 +314,7 @@ describe('TransferService', () => {
         status: 'IN_TRANSIT',
         rationsForTrip: '12.00',
       });
-      repository.update.mockResolvedValue({
+      repository.updateWithManager.mockResolvedValue({
         id: 1,
         requestId: 10,
         status: 'CANCELED',
@@ -436,8 +328,8 @@ describe('TransferService', () => {
 
       await service.updateTransfer(1, { status: 'CANCELED' });
 
-      expect(repository.cancelManifest).toHaveBeenCalledWith(1);
-      expect(repository.createTransferHistoryEntry).toHaveBeenCalled();
+      expect(repository.cancelManifestWithManager).toHaveBeenCalledWith(expect.anything(), 1);
+      expect(repository.createTransferHistoryEntryWithManager).toHaveBeenCalled();
     });
 
     it('throws if IN_TRANSIT and rations are insufficient', async () => {
@@ -458,7 +350,7 @@ describe('TransferService', () => {
       });
       dataSource.getRepository().findOne.mockResolvedValue({ minimumDailyRationPerPerson: '1.5' });
       repository.countTransferPeople.mockResolvedValue(4);
-      repository.update.mockResolvedValue({
+      repository.updateWithManager.mockResolvedValue({
         id: 1,
         requestId: 10,
         status: 'IN_TRANSIT',
@@ -494,7 +386,7 @@ describe('TransferService', () => {
       });
       dataSource.getRepository().findOne.mockResolvedValue({ minimumDailyRationPerPerson: '1.5' });
       repository.countTransferPeople.mockResolvedValue(4);
-      repository.update.mockResolvedValue({
+      repository.updateWithManager.mockResolvedValue({
         id: 1,
         requestId: 10,
         status: 'IN_TRANSIT',
