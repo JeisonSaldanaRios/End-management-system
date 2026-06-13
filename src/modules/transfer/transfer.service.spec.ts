@@ -7,12 +7,19 @@ jest.mock('../../common/validation/assert-exists', () => ({
   assertEntityExists: jest.fn(() => Promise.resolve()),
 }));
 
+const manager: any = {
+  save: jest.fn(),
+  findOne: jest.fn(),
+  query: jest.fn(),
+};
+
 const repository: any = {
   findById: jest.fn(),
   findByRequestId: jest.fn(),
   findAllAndCount: jest.fn(),
   create: jest.fn(),
   update: jest.fn(),
+  updateWithManager: jest.fn(),
   delete: jest.fn(),
   resolveRequestScope: jest.fn(),
   resolveTransferScope: jest.fn(),
@@ -54,6 +61,7 @@ const dataSource: any = {
   }),
   query: jest.fn(),
   createQueryRunner: jest.fn().mockReturnValue(queryRunner),
+  transaction: jest.fn().mockImplementation(async (cb: (m: typeof manager) => Promise<unknown>) => cb(manager)),
 };
 
 // ─── Suite ───────────────────────────────────────────────────────────────────
