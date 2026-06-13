@@ -151,10 +151,7 @@ export class AdmissionRequestController {
         }
       }
 
-      const request = await this.service.createRequest(body);
-      const resolvedRequest = file
-        ? await this.service.uploadAdmissionRequestPhoto(request.id, file)
-        : request;
+      const resolvedRequest = await this.service.createRequest(body, file);
 
       return {
         success: true,
