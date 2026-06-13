@@ -102,6 +102,11 @@ export class AdmissionRequestService {
       throw new Error('Ya existe un usuario registrado con este correo en este campamento');
     }
 
+    if (file) {
+      const uploadedUrl = await this.storageService.uploadImage(file, 'admission-photos');
+      data.photoUrl = uploadedUrl;
+    }
+
     const normalizedData = this.normalizeAiFieldsForCreate(data);
     const createdRequest = await this.repository.create(normalizedData);
     let requestToReturn = createdRequest;
