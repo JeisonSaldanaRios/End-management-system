@@ -165,6 +165,202 @@ describe('AdmissionRequestService (API-focused unit tests)', () => {
     expect(notificationService.queueEmail).toHaveBeenCalled();
   });
 
+  it('uploads the admission photo before creating the request', async () => {
+    const createdRequest = {
+      id: 2,
+      campId: 1,
+      email: 'photo@example.com',
+      desiredUsername: 'photouser',
+      name: 'Photo',
+      lastName1: 'User',
+      photoUrl: 'admission-photos/uploaded.jpg',
+      createdAt: new Date('2024-01-01T00:00:00.000Z'),
+    };
+
+    storageService.uploadImage.mockResolvedValue('admission-photos/uploaded.jpg');
+    repository.findByEmailAndCamp.mockResolvedValue(null);
+    repository.create.mockResolvedValue(createdRequest);
+    repository.findOccupationByName.mockResolvedValue({ id: 7, name: 'Farmer' });
+    repository.update.mockResolvedValue({
+      ...createdRequest,
+      status: 'PENDING_ADMIN',
+      suggestedOccupationId: 7,
+    });
+
+    await service.createRequest(
+      {
+        campId: 1,
+        email: 'photo@example.com',
+        desiredUsername: 'photouser',
+        name: 'Photo',
+        lastName1: 'User',
+        birthDate: '2000-01-01',
+        gender: 'MALE',
+        declaredHealthLevel: 'GOOD',
+        previousExperience: 'none',
+        physicalCondition: 'fit',
+        declaredSkills: 'helpful',
+      } as any,
+      {
+        originalname: 'photo.jpg',
+        mimetype: 'image/jpeg',
+        buffer: Buffer.from('photo'),
+      } as Express.Multer.File,
+    );
+
+    expect(storageService.uploadImage).toHaveBeenCalledWith(expect.any(Object), 'admission-photos');
+    expect(repository.create).toHaveBeenCalledWith(
+      expect.objectContaining({ photoUrl: 'admission-photos/uploaded.jpg' }),
+    );
+  });
+
+  it('creates a person with the admission photo when AI auto-approves', async () => {
+    const createdRequest = {
+      id: 3,
+      campId: 1,
+      email: 'auto@example.com',
+      desiredUsername: 'autouser',
+      name: 'Auto',
+      lastName1: 'Approved',
+      lastName2: null,
+      birthDate: '2000-01-01',
+      gender: 'MALE',
+      declaredHealthLevel: 'GOOD',
+      previousExperience: 'none',
+      physicalCondition: 'fit',
+      declaredSkills: 'helpful',
+      photoUrl: 'admission-photos/auto.jpg',
+      createdAt: new Date('2024-01-01T00:00:00.000Z'),
+    };
+
+    decisionTreeService.explainByModelName.mockResolvedValueOnce({
+      prediction: 'ACCEPT',
+      decisionAction: 'AUTO_APPROVE',
+      roleAssignment: {
+        mappedOccupationName: 'Farmer',
+        suggestedRole: 'Guardia',
+        rules: [],
+        summary: 'summary',
+        reason: 'reason',
+        recommendedAttributes: {},
+      },
+      explanation: { admissionSummary: 'admission summary', admissionReason: 'admission reason' },
+      predictionProbability: 0.98,
+      rules: [],
+    } as any);
+    storageService.uploadImage.mockResolvedValue('admission-photos/auto.jpg');
+    repository.findByEmailAndCamp.mockResolvedValue(null);
+    repository.create.mockResolvedValue(createdRequest);
+    repository.findOccupationByName.mockResolvedValue({ id: 7, name: 'Farmer' });
+    repository.update.mockResolvedValue({
+      ...createdRequest,
+      status: 'APPROVED',
+      suggestedOccupationId: 7,
+      finalOccupationId: 7,
+    });
+    occupationRepository.findOne.mockResolvedValue({ id: 7, name: 'Farmer', description: 'Field work' });
+
+    await service.createRequest(
+      {
+        campId: 1,
+        email: 'auto@example.com',
+        desiredUsername: 'autouser',
+        name: 'Auto',
+        lastName1: 'Approved',
+        birthDate: '2000-01-01',
+        gender: 'MALE',
+        declaredHealthLevel: 'GOOD',
+        previousExperience: 'none',
+        physicalCondition: 'fit',
+        declaredSkills: 'helpful',
+      } as any,
+      {
+        originalname: 'photo.jpg',
+        mimetype: 'image/jpeg',
+        buffer: Buffer.from('photo'),
+      } as Express.Multer.File,
+    );
+
+    expect(personRepository.create).toHaveBeenCalledWith(
+      expect.objectContaining({ imageUrl: 'admission-photos/auto.jpg' }),
+    );
+  });
+
+  it('deletes and clears the admission photo when AI auto-rejects', async () => {
+    const createdRequest = {
+      id: 4,
+      campId: 1,
+      email: 'autoreject@example.com',
+      desiredUsername: 'autoreject',
+      name: 'Auto',
+      lastName1: 'Rejected',
+      lastName2: null,
+      birthDate: '2000-01-01',
+      gender: 'MALE',
+      declaredHealthLevel: 'BAD',
+      previousExperience: 'none',
+      physicalCondition: 'limited',
+      declaredSkills: 'none',
+      photoUrl: 'admission-photos/rejected.jpg',
+      createdAt: new Date('2024-01-01T00:00:00.000Z'),
+    };
+
+    decisionTreeService.explainByModelName.mockResolvedValueOnce({
+      prediction: 'REJECT',
+      decisionAction: 'AUTO_REJECT',
+      roleAssignment: {
+        mappedOccupationName: 'Farmer',
+        suggestedRole: 'WORKER',
+        rules: [],
+        summary: 'summary',
+        reason: 'reason',
+        recommendedAttributes: {},
+      },
+      explanation: { admissionSummary: 'admission summary', admissionReason: 'risk too high' },
+      predictionProbability: 0.98,
+      rules: [],
+    } as any);
+    storageService.uploadImage.mockResolvedValue('admission-photos/rejected.jpg');
+    storageService.deleteImage.mockResolvedValue(undefined);
+    repository.findByEmailAndCamp.mockResolvedValue(null);
+    repository.create.mockResolvedValue(createdRequest);
+    repository.findOccupationByName.mockResolvedValue({ id: 7, name: 'Farmer' });
+    repository.update.mockResolvedValue({
+      ...createdRequest,
+      status: 'REJECTED',
+      photoUrl: null,
+      rejectionReason: 'Rechazado automáticamente por la IA. Motivo: risk too high',
+    });
+
+    const result = await service.createRequest(
+      {
+        campId: 1,
+        email: 'autoreject@example.com',
+        desiredUsername: 'autoreject',
+        name: 'Auto',
+        lastName1: 'Rejected',
+        birthDate: '2000-01-01',
+        gender: 'MALE',
+        declaredHealthLevel: 'BAD',
+        previousExperience: 'none',
+        physicalCondition: 'limited',
+        declaredSkills: 'none',
+      } as any,
+      {
+        originalname: 'photo.jpg',
+        mimetype: 'image/jpeg',
+        buffer: Buffer.from('photo'),
+      } as Express.Multer.File,
+    );
+
+    expect(result.status).toBe('REJECTED');
+    expect(storageService.deleteImage).toHaveBeenCalledWith('admission-photos/rejected.jpg');
+    expect(repository.update).toHaveBeenCalledWith(
+      createdRequest.id,
+      expect.objectContaining({ status: 'REJECTED', photoUrl: null }),
+    );
+  });
+
   it('rejects duplicate requests in the same camp', async () => {
     repository.findByEmailAndCamp.mockResolvedValue({ id: 99 });
 
@@ -241,6 +437,7 @@ describe('AdmissionRequestService (API-focused unit tests)', () => {
       declaredSkills: 'helpful',
       finalOccupationId: null,
       suggestedOccupationId: 7,
+      photoUrl: 'admission-photos/admin.jpg',
     });
     repository.findApprovedByEmailExcludingId.mockResolvedValue(null);
     occupationRepository.findOne.mockResolvedValue({
@@ -250,7 +447,7 @@ describe('AdmissionRequestService (API-focused unit tests)', () => {
       participatesInExpeditions: false,
       collectsResources: false,
     });
-    personRepository.findOne.mockResolvedValue({ id: 33 });
+    personRepository.findOne.mockResolvedValue({ id: 33, imageUrl: null });
     userRepository.findOne.mockResolvedValue({
       id: 44,
       role: 'WORKER',
@@ -280,6 +477,9 @@ describe('AdmissionRequestService (API-focused unit tests)', () => {
     );
     expect(notificationService.notifyCampRoles).toHaveBeenCalled();
     expect(notificationService.queueEmail).toHaveBeenCalled();
+    expect(personRepository.save).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 33, imageUrl: 'admission-photos/admin.jpg' }),
+    );
   });
 
   it('rejects a request through admin review with a reason', async () => {
@@ -293,7 +493,9 @@ describe('AdmissionRequestService (API-focused unit tests)', () => {
       lastName1: 'Me',
       lastName2: '',
       finalOccupationId: 7,
+      photoUrl: 'admission-photos/manual-reject.jpg',
     });
+    storageService.deleteImage.mockResolvedValue(undefined);
     repository.update.mockResolvedValue({
       id: 21,
       campId: 1,
@@ -304,6 +506,7 @@ describe('AdmissionRequestService (API-focused unit tests)', () => {
       lastName1: 'Me',
       lastName2: '',
       finalOccupationId: null,
+      photoUrl: null,
       rejectionReason: 'No cumple',
     });
 
@@ -316,9 +519,11 @@ describe('AdmissionRequestService (API-focused unit tests)', () => {
         reviewedBy: 99,
         status: 'REJECTED',
         finalOccupationId: null,
+        photoUrl: null,
         rejectionReason: 'No cumple',
       }),
     );
+    expect(storageService.deleteImage).toHaveBeenCalledWith('admission-photos/manual-reject.jpg');
   });
 
   it('uploads a new photo and deletes the previous one when present', async () => {
