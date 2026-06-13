@@ -99,7 +99,7 @@ export class PersonController {
   }
 
   @Get(':id')
-  @Roles('SYSTEM_ADMIN')
+  @Roles('SYSTEM_ADMIN', 'RESOURCE_MANAGEMENT', 'TRAVEL_MANAGER')
   @ApiOperation({ summary: 'Get Person by id' })
   @ApiParam({ name: 'id', type: Number, description: 'Person id' })
   @ApiOkResponseData(PersonEntity, { description: 'Person found' })
@@ -125,7 +125,7 @@ export class PersonController {
   }
 
   @Get()
-  @Roles('SYSTEM_ADMIN')
+  @Roles('SYSTEM_ADMIN', 'RESOURCE_MANAGEMENT', 'TRAVEL_MANAGER')
   @ApiOperation({ summary: 'List Person' })
   @ApiOkResponseList(PersonEntity, { description: 'Person list' })
   @ApiBadRequestResponse({ description: 'Invalid query parameters' })
@@ -160,19 +160,28 @@ export class PersonController {
       }
 
       const currentUser = this.getCurrentUser(req);
-      filters.campId = currentUser.campId;
 
-      if (campId) {
-        const parsedCampId = Number.parseInt(campId, 10);
-        if (Number.isNaN(parsedCampId)) {
-          throw new BadRequestException('Invalid camp ID');
+      if (currentUser.rol === 'SYSTEM_ADMIN') {
+        if (campId) {
+          const parsedCampId = Number.parseInt(campId, 10);
+          if (Number.isNaN(parsedCampId)) {
+            throw new BadRequestException('Invalid camp ID');
+          }
+          filters.campId = parsedCampId;
         }
+      } else {
+        filters.campId = currentUser.campId;
 
-        if (parsedCampId !== currentUser.campId) {
-          throw new BadRequestException('You cannot query persons from another camp');
+        if (campId) {
+          const parsedCampId = Number.parseInt(campId, 10);
+          if (Number.isNaN(parsedCampId)) {
+            throw new BadRequestException('Invalid camp ID');
+          }
+          if (parsedCampId !== currentUser.campId) {
+            throw new BadRequestException('You cannot query persons from another camp');
+          }
+          filters.campId = parsedCampId;
         }
-
-        filters.campId = parsedCampId;
       }
 
       if (currentStatus) {
