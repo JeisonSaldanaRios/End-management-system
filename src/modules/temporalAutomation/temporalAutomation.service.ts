@@ -292,19 +292,8 @@ export class TemporalAutomationService {
       } catch (error) {
         const message = error instanceof Error ? error.message : 'unknown error';
         this.logger.warn(
-          `No se pudo ejecutar automaticamente el traslado ${transfer.id}: ${message}`,
+          `No se pudo ejecutar automaticamente el traslado ${transfer.id}: ${message}. El traslado permanece en PENDING_DEPARTURE para revision manual.`,
         );
-
-        try {
-          await this.transferService.updateTransfer(transfer.id, { status: 'CANCELED' });
-        } catch (cancelErr) {
-          this.logger.warn(
-            `Falló al cancelar automáticamente el traslado ${transfer.id}: ${
-              cancelErr instanceof Error ? cancelErr.message : 'unknown error'
-            }`,
-          );
-        }
-
         try {
           const rows = (await this.transferRepo.query(
             `SELECT r.origin_camp_id AS origin, r.destination_camp_id AS destination
@@ -325,8 +314,8 @@ export class TemporalAutomationService {
             sourceId: number;
           } = {
             type: 'TRANSFER_EXECUTION_FAILED',
-            title: 'Ejecución de traslado fallida',
-            message: `El traslado #${transfer.id} no pudo ejecutarse automaticamente: ${message}`,
+            title: 'Traslado requiere atención manual',
+            message: `El traslado #${transfer.id} no pudo ejecutarse automaticamente y requiere revision manual: ${message}`,
             sourceType: 'transfer',
             sourceId: transfer.id,
           };
