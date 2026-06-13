@@ -199,6 +199,7 @@ export class AdmissionRequestService {
       }
 
       if (autoApproved) {
+        initialEmailSent = true;
         await this.notifyAdminReviewResult(updatedRequest, true, createdAccess);
       } else if (autoRejected) {
         await this.notifyInitialAdmissionRequest(createdRequest);
