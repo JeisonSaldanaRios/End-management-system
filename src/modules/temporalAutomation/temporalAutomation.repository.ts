@@ -266,6 +266,25 @@ export class TemporalAutomationRepository {
     return users.map((user) => user.id);
   }
 
+  async hasExpeditionCompleteNotificationPending(
+    expeditionId: number,
+    campId: number,
+  ): Promise<boolean> {
+    const rows = (await this.expeditionRepo.query(
+      `
+      SELECT COUNT(*)::int AS total
+      FROM notification
+      WHERE camp_id = $1
+        AND source_type = 'expedition_complete_pending'
+        AND source_id = $2
+        AND read = false
+      `,
+      [campId, expeditionId],
+    )) as Array<{ total: number }>;
+
+    return (rows[0]?.total ?? 0) > 0;
+  }
+
   async findAutomationRecorderUserId(campId: number): Promise<number | null> {
     const preferred = await this.userRepo.findOne({
       where: [

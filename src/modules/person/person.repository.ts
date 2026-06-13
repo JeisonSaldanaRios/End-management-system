@@ -3,6 +3,9 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
 import { AdmissionRequestEntity } from '../admissionRequest/admissionRequest.entity';
+import { OccupationEntity } from '../occupation/occupation.entity';
+import { ExpeditionEntity } from '../expedition/expedition.entity';
+import { ExpeditionParticipantEntity } from '../expeditionParticipant/expeditionParticipant.entity';
 import { UserEntity } from '../systemUser/systemUser.entity';
 import { PersonEntity } from './person.entity';
 import type { CreatePersonDTO, Person, PersonStatus, UpdatePersonDTO } from './person.model';
@@ -117,6 +120,99 @@ export class PersonRepository {
 
     const [data, total] = await qb.getManyAndCount();
     return { data, total };
+  }
+
+  async findExpeditionCandidatesAndCount(filters: {
+    campId: number;
+    occupationSearch?: string;
+    availableOnly?: boolean;
+    offset?: number;
+    limit?: number;
+  }): Promise<{ data: Person[]; total: number }> {
+    const qb = this.repo
+      .createQueryBuilder('p')
+      .innerJoin(OccupationEntity, 'o', 'o.id = p.occupationId')
+      .addSelect('o.name')
+      .where('p.campId = :campId', { campId: filters.campId })
+      .andWhere('o.participatesInExpeditions = :participatesInExpeditions', {
+        participatesInExpeditions: true,
+      });
+
+    if (filters.occupationSearch?.trim()) {
+      qb.andWhere('LOWER(o.name) LIKE :occupationSearch', {
+        occupationSearch: `%${filters.occupationSearch.trim().toLowerCase()}%`,
+      });
+    }
+
+    if (filters.availableOnly === true) {
+      qb.andWhere('p.currentStatus = :currentStatus', { currentStatus: 'ACTIVE' });
+      qb.andWhere(
+        `
+        NOT EXISTS (
+          SELECT 1
+          FROM ${this.repo.manager.getRepository(ExpeditionParticipantEntity).metadata.tableName} ep
+          INNER JOIN ${this.repo.manager.getRepository(ExpeditionEntity).metadata.tableName} e
+            ON e.id = ep.expedition_id
+          WHERE ep.person_id = p.id
+            AND ep.status = :activeParticipantStatus
+            AND e.status IN (:...blockingExpeditionStatuses)
+        )
+        `,
+        {
+          activeParticipantStatus: 'ACTIVE',
+          blockingExpeditionStatuses: ['PLANNED', 'IN_PROGRESS', 'DELAYED', 'LOST'],
+        },
+      );
+    }
+
+    qb.orderBy('o.name', 'ASC').addOrderBy('p.name', 'ASC').addOrderBy('p.lastName1', 'ASC');
+
+    if (filters.limit !== undefined) {
+      qb.take(filters.limit);
+    }
+
+    if (filters.offset !== undefined) {
+      qb.skip(filters.offset);
+    }
+
+    const [data, total] = await qb.getManyAndCount();
+    return { data, total };
+  }
+
+  async findExpeditionAssignmentsForPeople(
+    personIds: number[],
+  ): Promise<
+    Array<{
+      personId: number;
+      expeditionId: number;
+      expeditionName: string;
+      expeditionStatus: string;
+      participantStatus: string;
+    }>
+  > {
+    if (personIds.length === 0) {
+      return [];
+    }
+
+    return await this.repo.manager
+      .getRepository(ExpeditionParticipantEntity)
+      .createQueryBuilder('ep')
+      .innerJoin(ExpeditionEntity, 'e', 'e.id = ep.expeditionId')
+      .select('ep.personId', 'personId')
+      .addSelect('e.id', 'expeditionId')
+      .addSelect('e.name', 'expeditionName')
+      .addSelect('e.status', 'expeditionStatus')
+      .addSelect('ep.status', 'participantStatus')
+      .where('ep.personId IN (:...personIds)', { personIds })
+      .andWhere('ep.status = :participantStatus', { participantStatus: 'ACTIVE' })
+      .orderBy('e.plannedDepartureDate', 'DESC')
+      .getRawMany<{
+        personId: number;
+        expeditionId: number;
+        expeditionName: string;
+        expeditionStatus: string;
+        participantStatus: string;
+      }>();
   }
 
   async update(id: number, data: UpdatePersonDTO): Promise<Person | null> {

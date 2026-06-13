@@ -10,6 +10,8 @@ import { PersonStatusHistoryRepository } from '../personStatusHistory/personStat
 import { R2StorageService } from '../../services/r2-storage.service';
 import type { UserEntity } from '../systemUser/systemUser.entity';
 
+const BLOCKING_EXPEDITION_STATUSES = ['PLANNED', 'IN_PROGRESS', 'DELAYED', 'LOST'] as const;
+
 @Injectable()
 export class PersonService {
   constructor(
@@ -264,7 +266,21 @@ export class PersonService {
         role: string;
         status: string;
       } | null;
-      occupation?: { id: number; name: string; description: string | null } | null;
+      occupation?: {
+        id: number;
+        name: string;
+        description: string | null;
+        participatesInExpeditions?: boolean;
+      } | null;
+      isAvailableForExpedition?: boolean;
+      expeditionAvailabilityReason?: string | null;
+      expeditionAssignments?: Array<{
+        expeditionId: number;
+        expeditionName: string;
+        expeditionStatus: string;
+        participantStatus: string;
+        blocksAssignment: boolean;
+      }>;
     }
   > {
     const result: Person & {
@@ -281,7 +297,21 @@ export class PersonService {
         role: string;
         status: string;
       } | null;
-      occupation?: { id: number; name: string; description: string | null } | null;
+      occupation?: {
+        id: number;
+        name: string;
+        description: string | null;
+        participatesInExpeditions?: boolean;
+      } | null;
+      isAvailableForExpedition?: boolean;
+      expeditionAvailabilityReason?: string | null;
+      expeditionAssignments?: Array<{
+        expeditionId: number;
+        expeditionName: string;
+        expeditionStatus: string;
+        participantStatus: string;
+        blocksAssignment: boolean;
+      }>;
     } = { ...person };
 
     if (person.imageUrl) {
@@ -316,19 +346,30 @@ export class PersonService {
       result.systemUser = null;
     }
 
-    let occupationData: { id: number; name: string; description: string | null } | null = null;
+    let occupationData: {
+      id: number;
+      name: string;
+      description: string | null;
+      participatesInExpeditions?: boolean;
+    } | null = null;
     if (person.occupationId) {
       try {
         const occupationRepo = this.dataSource.getRepository(OccupationEntity);
         const occupation = await occupationRepo.findOne({
           where: { id: person.occupationId },
-          select: { id: true, name: true, description: true },
+          select: {
+            id: true,
+            name: true,
+            description: true,
+            participatesInExpeditions: true,
+          },
         });
         if (occupation) {
           occupationData = {
             id: occupation.id,
             name: occupation.name,
             description: occupation.description,
+            participatesInExpeditions: occupation.participatesInExpeditions,
           };
         }
       } catch (error) {
@@ -362,6 +403,82 @@ export class PersonService {
     const result = await this.getAllPersons(filters);
     const dataWithUrls = await Promise.all(
       result.data.map((person) => this.addSignedUrlToPerson(person)),
+    );
+    return { data: dataWithUrls, total: result.total };
+  }
+
+  async getExpeditionCandidatesWithSignedUrls(filters: {
+    campId: number;
+    occupationSearch?: string;
+    availableOnly?: boolean;
+    page?: number;
+    limit?: number;
+  }): Promise<{ data: (Person & { imageSignedUrl?: string })[]; total: number }> {
+    const page = filters.page ?? 1;
+    const limit = filters.limit ?? 50;
+    const repoFilters: {
+      campId: number;
+      occupationSearch?: string;
+      availableOnly?: boolean;
+      offset: number;
+      limit: number;
+    } = {
+      campId: filters.campId,
+      offset: (page - 1) * limit,
+      limit,
+    };
+
+    if (filters.occupationSearch !== undefined) {
+      repoFilters.occupationSearch = filters.occupationSearch;
+    }
+
+    if (filters.availableOnly !== undefined) {
+      repoFilters.availableOnly = filters.availableOnly;
+    }
+
+    const result = await this.repository.findExpeditionCandidatesAndCount(repoFilters);
+    const assignments = await this.repository.findExpeditionAssignmentsForPeople(
+      result.data.map((person) => person.id),
+    );
+    const assignmentsByPersonId = new Map<number, typeof assignments>();
+
+    for (const assignment of assignments) {
+      const current = assignmentsByPersonId.get(assignment.personId) ?? [];
+      current.push(assignment);
+      assignmentsByPersonId.set(assignment.personId, current);
+    }
+
+    const dataWithUrls = await Promise.all(
+      result.data.map(async (person) => {
+        const personAssignments = assignmentsByPersonId.get(person.id) ?? [];
+        const expeditionAssignments = personAssignments.map((assignment) => ({
+          expeditionId: Number(assignment.expeditionId),
+          expeditionName: assignment.expeditionName,
+          expeditionStatus: assignment.expeditionStatus,
+          participantStatus: assignment.participantStatus,
+          blocksAssignment: BLOCKING_EXPEDITION_STATUSES.includes(
+            assignment.expeditionStatus as (typeof BLOCKING_EXPEDITION_STATUSES)[number],
+          ),
+        }));
+        const blockingAssignment = expeditionAssignments.find(
+          (assignment) => assignment.blocksAssignment,
+        );
+        const isAvailableForExpedition =
+          person.currentStatus === 'ACTIVE' && blockingAssignment === undefined;
+        const expeditionAvailabilityReason =
+          person.currentStatus !== 'ACTIVE'
+            ? `Person status is ${person.currentStatus}`
+            : blockingAssignment
+              ? `Already assigned to expedition ${blockingAssignment.expeditionName} (${blockingAssignment.expeditionStatus})`
+              : null;
+
+        return {
+          ...(await this.addSignedUrlToPerson(person)),
+          isAvailableForExpedition,
+          expeditionAvailabilityReason,
+          expeditionAssignments,
+        };
+      }),
     );
     return { data: dataWithUrls, total: result.total };
   }
