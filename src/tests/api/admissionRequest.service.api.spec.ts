@@ -258,6 +258,7 @@ describe('AdmissionRequestService (API-focused unit tests)', () => {
       personId: 33,
       email: 'admin@example.com',
       campId: 1,
+      requestId: 20,
     });
     repository.update.mockResolvedValue({
       id: 20,
