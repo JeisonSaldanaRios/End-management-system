@@ -34,6 +34,7 @@ const temporalAutomationRepository = {
   findPersonStatusById: jest.fn(),
   updatePersonStatus: jest.fn(),
   findActiveUserIdsByCampAndPersonIds: jest.fn(),
+  hasExpeditionCompleteNotificationPending: jest.fn(),
 };
 
 const notificationService = {
@@ -61,6 +62,7 @@ describe('TemporalAutomationService', () => {
     inventoryAlertRepo.save.mockImplementation((x) => Promise.resolve({ id: 123, ...x }));
     inventoryMovementRepo.save.mockImplementation((x) => Promise.resolve({ id: 123, ...x }));
     temporalAutomationRepository.findActiveUserIdsByCampAndPersonIds.mockResolvedValue([]);
+    temporalAutomationRepository.hasExpeditionCompleteNotificationPending.mockResolvedValue(false);
 
     service = new TemporalAutomationService(
       campInventoryRepo as never,
