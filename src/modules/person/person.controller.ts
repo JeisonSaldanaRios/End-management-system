@@ -75,6 +75,10 @@ export class PersonController {
     };
   }
 
+  private isSystemAdmin(rol: string): boolean {
+    return rol === 'SYSTEM_ADMIN';
+  }
+
   @Post()
   @Roles('NO_ACCESS')
   @ApiOperation({ summary: 'Create Person' })
@@ -94,6 +98,129 @@ export class PersonController {
     } catch (error) {
       throw new BadRequestException(
         error instanceof Error ? error.message : 'Error creating person',
+      );
+    }
+  }
+
+  @Get('expedition-candidates')
+  @Roles('SYSTEM_ADMIN', 'TRAVEL_MANAGER')
+  @ApiOperation({ summary: 'List people eligible for expeditions' })
+  @ApiOkResponseList(PersonEntity, { description: 'Expedition candidates' })
+  @ApiBadRequestResponse({ description: 'Invalid query parameters' })
+  @ApiQuery({
+    name: 'campId',
+    required: false,
+    type: Number,
+    description: 'Camp id. Non-admin users are limited to their own camp.',
+  })
+  @ApiQuery({
+    name: 'occupationSearch',
+    required: false,
+    type: String,
+    description: 'Optional occupation name search, for example scout.',
+  })
+  @ApiQuery({
+    name: 'availableOnly',
+    required: false,
+    type: Boolean,
+    description:
+      'When true, returns only ACTIVE people with no active assignment in PLANNED, IN_PROGRESS, DELAYED, or LOST expeditions.',
+  })
+  @ApiQuery({ name: 'page', required: false, type: Number, description: 'Page (pagination)' })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    type: Number,
+    description: 'Items per page (pagination)',
+  })
+  @ApiUnauthorizedResponse({ description: 'Missing or invalid authentication token' })
+  @ApiForbiddenResponse({ description: 'Insufficient permissions' })
+  async getExpeditionCandidates(
+    @Query('campId') campId?: string,
+    @Query('occupationSearch') occupationSearch?: string,
+    @Query('availableOnly') availableOnly?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Req() req?: Request,
+  ) {
+    try {
+      if (!req) {
+        throw new BadRequestException('Request context is required');
+      }
+
+      const currentUser = this.getCurrentUser(req);
+      const isAdmin = this.isSystemAdmin(currentUser.rol);
+      let resolvedCampId = currentUser.campId;
+
+      if (campId) {
+        const parsedCampId = Number.parseInt(campId, 10);
+        if (Number.isNaN(parsedCampId)) {
+          throw new BadRequestException('Invalid camp ID');
+        }
+
+        if (!isAdmin && parsedCampId !== currentUser.campId) {
+          throw new BadRequestException('You cannot query persons from another camp');
+        }
+
+        resolvedCampId = parsedCampId;
+      }
+
+      let parsedPage: number | undefined;
+      if (page) {
+        parsedPage = Number.parseInt(page, 10);
+        if (Number.isNaN(parsedPage) || parsedPage < 1) {
+          throw new BadRequestException('Invalid page');
+        }
+      }
+
+      let parsedLimit: number | undefined;
+      if (limit) {
+        parsedLimit = Number.parseInt(limit, 10);
+        if (Number.isNaN(parsedLimit) || parsedLimit < 1) {
+          throw new BadRequestException('Invalid limit');
+        }
+      }
+
+      let parsedAvailableOnly: boolean | undefined;
+      if (availableOnly !== undefined) {
+        if (availableOnly !== 'true' && availableOnly !== 'false') {
+          throw new BadRequestException('Invalid availableOnly');
+        }
+        parsedAvailableOnly = availableOnly === 'true';
+      }
+
+      const filters: {
+        campId: number;
+        occupationSearch?: string;
+        availableOnly?: boolean;
+        page?: number;
+        limit?: number;
+      } = {
+        campId: resolvedCampId,
+      };
+
+      if (occupationSearch !== undefined) filters.occupationSearch = occupationSearch;
+      if (parsedAvailableOnly !== undefined) filters.availableOnly = parsedAvailableOnly;
+      if (parsedPage !== undefined) filters.page = parsedPage;
+      if (parsedLimit !== undefined) filters.limit = parsedLimit;
+
+      const result = await this.service.getExpeditionCandidatesWithSignedUrls(filters);
+      const resolvedPage = parsedPage ?? 1;
+      const resolvedLimit = parsedLimit ?? 50;
+
+      return {
+        success: true,
+        data: result.data,
+        pagination: {
+          page: resolvedPage,
+          limit: resolvedLimit,
+          total: result.total,
+          pages: Math.ceil(result.total / resolvedLimit),
+        },
+      };
+    } catch (error) {
+      throw new BadRequestException(
+        error instanceof Error ? error.message : 'Error getting expedition candidates',
       );
     }
   }

@@ -264,6 +264,8 @@ export class TemporalAutomationService {
           await this.notifyExpeditionStatusChange(expedition, previousStatus);
         }
       }
+
+      await this.notifyParticipantsToCompleteIfPastReturn(expedition, now);
     }
   }
 
@@ -671,6 +673,53 @@ export class TemporalAutomationService {
       message: `Tu expedicion ${expedition.name} ahora esta en estado ${expedition.status}.`,
       sourceType: 'expedition',
       sourceId: expedition.id,
+    });
+  }
+
+  private async notifyParticipantsToCompleteIfPastReturn(
+    expedition: ExpeditionEntity,
+    now: Date,
+  ): Promise<void> {
+    const terminalStatuses = ['COMPLETED', 'CANCELED', 'RETURNED_AFTER_LOST'];
+    if (
+      terminalStatuses.includes(expedition.status) ||
+      now.getTime() < expedition.plannedReturnDate.getTime()
+    ) {
+      return;
+    }
+
+    const alreadyNotified =
+      await this.temporalAutomationRepository.hasExpeditionCompleteNotificationPending(
+        expedition.id,
+        expedition.campId,
+      );
+    if (alreadyNotified) {
+      return;
+    }
+
+    const personIds = await this.expeditionParticipantRepository.getActivePersonIdsByExpedition(
+      expedition.id,
+    );
+    if (personIds.length === 0) {
+      return;
+    }
+
+    const userIds = await this.temporalAutomationRepository.findActiveUserIdsByCampAndPersonIds(
+      expedition.campId,
+      personIds,
+    );
+    if (userIds.length === 0) {
+      return;
+    }
+
+    await this.notificationService.notifyUsers(userIds, {
+      campId: expedition.campId,
+      type: 'EXPEDITION_COMPLETED',
+      title: 'Expedicion lista para completar',
+      message: `La expedicion "${expedition.name}" ha finalizado su tiempo estimado. Confirma el regreso del equipo para generar el botin obtenido.`,
+      sourceType: 'expedition_complete_pending',
+      sourceId: expedition.id,
+      sendEmail: false,
     });
   }
 }
