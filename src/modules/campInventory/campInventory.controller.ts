@@ -78,7 +78,7 @@ export class CampInventoryController {
   }
 
   @Get(':campId/:resourceTypeId')
-  @Roles('RESOURCE_MANAGEMENT')
+  @Roles('RESOURCE_MANAGEMENT', 'TRAVEL_MANAGER', 'SYSTEM_ADMIN')
   @ApiOperation({ summary: 'Get Camp Inventory by campId and resourceTypeId' })
   @ApiParam({ name: 'campId', type: Number, description: 'Camp id' })
   @ApiParam({ name: 'resourceTypeId', type: Number, description: 'Resource Type id' })
@@ -110,7 +110,7 @@ export class CampInventoryController {
     return { success: true, data: item };
   }
   @Get()
-  @Roles('RESOURCE_MANAGEMENT')
+  @Roles('RESOURCE_MANAGEMENT', 'TRAVEL_MANAGER', 'SYSTEM_ADMIN')
   @ApiOperation({ summary: 'List Camp Inventory' })
   @ApiOkResponseList(CampInventoryEntity, { description: 'Camp Inventory list' })
   @ApiBadRequestResponse({ description: 'Invalid query parameters' })

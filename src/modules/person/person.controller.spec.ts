@@ -128,7 +128,7 @@ describe('PersonController', () => {
     it('should upload a photo', async () => {
       const mockFile = { mimetype: 'image/jpeg', size: 100 } as any;
       service.getPersonById.mockResolvedValue({ id: 1, campId: 1 } as any);
-      service.findUserByPersonId.mockResolvedValue({ id: 1 } as any);
+      service.findUserByPersonId.mockResolvedValue({ id: 1, role: 'WORKER', status: 'ACTIVE', username: 'mockuser' } as any);
       service.uploadPersonPhoto.mockResolvedValue({ id: 1, photoUrl: 'url' } as any);
 
       const result = await controller.uploadPhoto('1', mockFile, mockRequest);
@@ -264,7 +264,7 @@ describe('PersonController', () => {
     it('should throw BadRequestException if owner constraint is violated', async () => {
       const mockFile = { mimetype: 'image/jpeg', size: 100 } as any;
       service.getPersonById.mockResolvedValue({ id: 1, campId: 1 } as any);
-      service.findUserByPersonId.mockResolvedValue({ id: 999 } as any); // different user id
+      service.findUserByPersonId.mockResolvedValue({ id: 999, role: 'WORKER', status: 'ACTIVE', username: 'mockuser2' } as any); // different user id
 
       await expect(controller.uploadPhoto('1', mockFile, mockRequest)).rejects.toThrow(
         'You can only update your own profile photo',
@@ -276,7 +276,7 @@ describe('PersonController', () => {
     it('should update photo successfully for the owner', async () => {
       const mockFile = { mimetype: 'image/jpeg', size: 100 } as any;
       service.getPersonById.mockResolvedValue({ id: 1, campId: 1 } as any);
-      service.findUserByPersonId.mockResolvedValue({ id: 1 } as any);
+      service.findUserByPersonId.mockResolvedValue({ id: 1, role: 'WORKER', status: 'ACTIVE', username: 'mockuser' } as any);
       service.uploadPersonPhoto.mockResolvedValue({ id: 1, photoUrl: 'updated-url' } as any);
 
       const result = await controller.updatePhoto('1', mockFile, mockRequest);
@@ -314,7 +314,7 @@ describe('PersonController', () => {
     it('should throw BadRequestException if not the owner', async () => {
       const mockFile = { mimetype: 'image/png', size: 100 } as any;
       service.getPersonById.mockResolvedValue({ id: 1, campId: 1 } as any);
-      service.findUserByPersonId.mockResolvedValue({ id: 999 } as any);
+      service.findUserByPersonId.mockResolvedValue({ id: 999, role: 'WORKER', status: 'ACTIVE', username: 'mockuser2' } as any);
 
       await expect(controller.updatePhoto('1', mockFile, mockRequest)).rejects.toThrow(
         'You can only update your own profile photo',

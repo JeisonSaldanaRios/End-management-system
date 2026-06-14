@@ -8,12 +8,19 @@ jest.mock('../../common/validation/assert-exists', () => ({
   assertEntityExists: jest.fn(() => Promise.resolve()),
 }));
 
+const manager: any = {
+  save: jest.fn(),
+  findOne: jest.fn(),
+  query: jest.fn(),
+};
+
 const repository: any = {
   findById: jest.fn(),
   findByRequestId: jest.fn(),
   findAllAndCount: jest.fn(),
   create: jest.fn(),
   update: jest.fn(),
+  updateWithManager: jest.fn(),
   delete: jest.fn(),
   resolveRequestScope: jest.fn(),
   resolveTransferScope: jest.fn(),
@@ -48,9 +55,19 @@ const repository: any = {
   getCommittedRationsForCamp: jest.fn(),
   getTransportStaffForTransfer: jest.fn(),
   getCampInventoryAmounts: jest.fn(),
+  getCampInventoryAmountsWithManager: jest.fn(),
   getRequestResourceDetails: jest.fn(),
+  getRequestResourceDetailsWithManager: jest.fn(),
   findBusyPersonIds: jest.fn(),
   replaceTransportStaff: jest.fn(),
+  countAppliedTransferRationMovementsWithManager: jest.fn(),
+  countAppliedTransferSentMovementsWithManager: jest.fn(),
+  countAppliedTransferReceivedMovementsWithManager: jest.fn(),
+  findDeliveredResourcesByTransferIdWithManager: jest.fn(),
+  findDeliveredResourceByTransferAndTypeWithManager: jest.fn(),
+  insertDeliveredTransferResourceWithManager: jest.fn(),
+  findRationInventoryCandidateWithManager: jest.fn(),
+  createInventoryMovementWithManager: jest.fn(),
 };
 
 const notificationService: any = {
@@ -59,6 +76,15 @@ const notificationService: any = {
 
 const inventoryMovementService: any = {
   createMovement: jest.fn(),
+};
+
+const queryRunner: any = {
+  connect: jest.fn(),
+  startTransaction: jest.fn(),
+  query: jest.fn(),
+  commitTransaction: jest.fn(),
+  rollbackTransaction: jest.fn(),
+  release: jest.fn(),
 };
 
 const dataSource: any = {
@@ -93,11 +119,16 @@ describe('TransferService', () => {
     repository.countAppliedTransferReceivedMovements.mockResolvedValue(0);
     repository.countTransferRequestedPeople.mockResolvedValue(0);
     repository.getCommittedRationsForCamp.mockResolvedValue('0.00');
-    repository.getCampInventoryAmounts.mockResolvedValue({
+    repository.getCampInventoryAmountsWithManager.mockResolvedValue({
+      currentAmount: '100.00',
+      minimumAlertAmount: '0.00',
+    });
+    repository.getCampInventoryAmountsWithManager.mockResolvedValue({
       currentAmount: '100.00',
       minimumAlertAmount: '0.00',
     });
     repository.getRequestResourceDetails.mockResolvedValue([]);
+    repository.getRequestResourceDetailsWithManager.mockResolvedValue([]);
     repository.findBusyPersonIds.mockResolvedValue([]);
     repository.findRationInventoryCandidate.mockResolvedValue({
       resourceTypeId: 9,
@@ -415,7 +446,7 @@ describe('TransferService', () => {
       });
       dataSource.getRepository().findOne.mockResolvedValue({ minimumDailyRationPerPerson: '1.5' });
       repository.countTransferPeople.mockResolvedValue(4);
-      repository.update.mockResolvedValue({
+      repository.updateWithManager.mockResolvedValue({
         id: 1,
         requestId: 10,
         status: 'IN_TRANSIT',
@@ -451,7 +482,7 @@ describe('TransferService', () => {
       });
       dataSource.getRepository().findOne.mockResolvedValue({ minimumDailyRationPerPerson: '1.5' });
       repository.countTransferPeople.mockResolvedValue(4);
-      repository.update.mockResolvedValue({
+      repository.updateWithManager.mockResolvedValue({
         id: 1,
         requestId: 10,
         status: 'IN_TRANSIT',

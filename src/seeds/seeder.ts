@@ -29,21 +29,10 @@ export async function runSeeder(dataSource: DataSource): Promise<void> {
       'Omega Fortress',
       'Echo Outpost',
     ];
-    
-    const campCoordinates = [
-      { lat: 39.8283, lng: -98.5795 },
-      { lat: 52.52, lng: 13.405 },
-      { lat: -34.6037, lng: -58.3816 },
-      { lat: 35.6762, lng: 139.6503 },
-      { lat: -22.5621, lng: 17.0658 },
-    ];
-
     const campIds: number[] = [];
 
     for (let index = 0; index < campNames.length; index += 1) {
       const campNumber = index + 1;
-      
-      const { lat, lng } = campCoordinates[index]!;
 
       const insertedCamp = await queryRunner.query(
         `
@@ -58,7 +47,7 @@ export async function runSeeder(dataSource: DataSource): Promise<void> {
           VALUES ($1, $2, $3, $4, $5, $6)
           RETURNING id
         `,
-        [campNames[index], '2024-01-01', 20, 'ACTIVE', lat, lng],
+        [campNames[index], '2024-01-01', 20, 'ACTIVE', 9.934739, -84.087502],
       );
 
       const campId: number = insertedCamp[0].id;

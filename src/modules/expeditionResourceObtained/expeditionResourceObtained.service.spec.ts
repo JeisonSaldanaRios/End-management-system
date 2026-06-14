@@ -1,4 +1,4 @@
-import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
+import { ForbiddenException } from '@nestjs/common';
 import { ExpeditionResourceObtainedService } from './expeditionResourceObtained.service';
 import type { ExpeditionResourceObtainedRepository } from './expeditionResourceObtained.repository';
 import type { NotificationService } from '../notification/notification.service';
@@ -42,138 +42,13 @@ describe('ExpeditionResourceObtainedService', () => {
       date: new Date('2026-05-01'),
     };
 
-    it('throws if expedition not found', async () => {
-      repository.findExpeditionById.mockResolvedValue(null);
-      await expect(service.createRecord(validDto)).rejects.toThrow(NotFoundException);
-    });
-
-    it('throws if user not found', async () => {
-      repository.findExpeditionById.mockResolvedValue({
-        id: 1,
-        campId: 1,
-        status: 'IN_PROGRESS',
-      } as never);
-      repository.findUserById.mockResolvedValue(null);
-      await expect(service.createRecord(validDto)).rejects.toThrow(NotFoundException);
-    });
-
-    it('throws if user is not ACTIVE', async () => {
-      repository.findExpeditionById.mockResolvedValue({
-        id: 1,
-        campId: 1,
-        status: 'IN_PROGRESS',
-      } as never);
-      repository.findUserById.mockResolvedValue({
-        id: 1,
-        status: 'INACTIVE',
-        role: 'SYSTEM_ADMIN',
-      } as never);
+    it('rejects manual creation because loot is generated automatically', async () => {
       await expect(service.createRecord(validDto)).rejects.toThrow(ForbiddenException);
-    });
-
-    it('throws if user role is not authorized', async () => {
-      repository.findExpeditionById.mockResolvedValue({
-        id: 1,
-        campId: 1,
-        status: 'IN_PROGRESS',
-      } as never);
-      repository.findUserById.mockResolvedValue({
-        id: 1,
-        status: 'ACTIVE',
-        role: 'SCOUT',
-      } as never);
-      await expect(service.createRecord(validDto)).rejects.toThrow(ForbiddenException);
-    });
-
-    it('throws if user camp mismatches', async () => {
-      repository.findExpeditionById.mockResolvedValue({
-        id: 1,
-        campId: 1,
-        status: 'IN_PROGRESS',
-      } as never);
-      repository.findUserById.mockResolvedValue({
-        id: 1,
-        status: 'ACTIVE',
-        role: 'SYSTEM_ADMIN',
-        campId: 2,
-      } as never);
-      await expect(service.createRecord(validDto)).rejects.toThrow(BadRequestException);
-    });
-
-    it('throws if movementId is provided but not found', async () => {
-      repository.findExpeditionById.mockResolvedValue({
-        id: 1,
-        campId: 1,
-        status: 'IN_PROGRESS',
-      } as never);
-      repository.findUserById.mockResolvedValue({
-        id: 1,
-        status: 'ACTIVE',
-        role: 'SYSTEM_ADMIN',
-        campId: 1,
-      } as never);
-      repository.findMovementById.mockResolvedValue(null);
-      await expect(service.createRecord({ ...validDto, movementId: 1 })).rejects.toThrow(
-        NotFoundException,
-      );
-    });
-
-    it('throws if movement camp mismatches', async () => {
-      repository.findExpeditionById.mockResolvedValue({
-        id: 1,
-        campId: 1,
-        status: 'IN_PROGRESS',
-      } as never);
-      repository.findUserById.mockResolvedValue({
-        id: 1,
-        status: 'ACTIVE',
-        role: 'SYSTEM_ADMIN',
-        campId: 1,
-      } as never);
-      repository.findMovementById.mockResolvedValue({
-        id: 1,
-        campId: 2,
-        resourceTypeId: 1,
-      } as never);
-      await expect(service.createRecord({ ...validDto, movementId: 1 })).rejects.toThrow(
-        BadRequestException,
-      );
-    });
-
-    it('throws if expedition status is invalid', async () => {
-      repository.findExpeditionById.mockResolvedValue({
-        id: 1,
-        campId: 1,
-        status: 'PLANNED',
-      } as never);
-      repository.findUserById.mockResolvedValue({
-        id: 1,
-        status: 'ACTIVE',
-        role: 'SYSTEM_ADMIN',
-        campId: 1,
-      } as never);
       await expect(service.createRecord(validDto)).rejects.toThrow(
-        'No se pueden registrar recursos obtenidos',
+        'Expedition loot is generated automatically when the expedition is completed',
       );
-    });
-
-    it('creates record and notifies (COMPLETED is valid)', async () => {
-      repository.findExpeditionById.mockResolvedValue({
-        id: 1,
-        campId: 1,
-        status: 'COMPLETED',
-      } as never);
-      repository.findUserById.mockResolvedValue({
-        id: 1,
-        status: 'ACTIVE',
-        role: 'SYSTEM_ADMIN',
-        campId: 1,
-      } as never);
-      repository.create.mockResolvedValue({ id: 1, ...validDto } as never);
-
-      const result = await service.createRecord(validDto);
-      expect(result.id).toBe(1);
-      expect(notificationService.notifyCampRoles).toHaveBeenCalled();
+      expect(repository.create).not.toHaveBeenCalled();
+      expect(notificationService.notifyCampRoles).not.toHaveBeenCalled();
     });
   });
 
@@ -191,29 +66,13 @@ describe('ExpeditionResourceObtainedService', () => {
   });
 
   describe('updateRecord', () => {
-    it('returns null if not found', async () => {
-      repository.findById.mockResolvedValue(null);
-      await expect(service.updateRecord(1, {})).resolves.toBeNull();
-    });
-
-    it('updates and notifies', async () => {
-      repository.findById.mockResolvedValue({ id: 1, expeditionId: 1 } as never);
-      repository.findExpeditionById.mockResolvedValue({
-        id: 1,
-        campId: 1,
-        status: 'IN_PROGRESS',
-      } as never);
-      repository.findUserById.mockResolvedValue({
-        id: 1,
-        status: 'ACTIVE',
-        role: 'SYSTEM_ADMIN',
-        campId: 1,
-      } as never);
-      repository.update.mockResolvedValue({ id: 1, expeditionId: 1 } as never);
-
-      const result = await service.updateRecord(1, {});
-      expect(result?.id).toBe(1);
-      expect(notificationService.notifyCampRoles).toHaveBeenCalled();
+    it('rejects manual updates because loot is generated automatically', async () => {
+      await expect(service.updateRecord(1, {})).rejects.toThrow(ForbiddenException);
+      await expect(service.updateRecord(1, {})).rejects.toThrow(
+        'Expedition loot records cannot be updated manually because loot is generated automatically',
+      );
+      expect(repository.update).not.toHaveBeenCalled();
+      expect(notificationService.notifyCampRoles).not.toHaveBeenCalled();
     });
   });
 

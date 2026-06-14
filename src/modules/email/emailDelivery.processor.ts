@@ -62,7 +62,7 @@ export class EmailDeliveryProcessor {
 
         await this.outboxService.save(entry);
         this.logger.warn(
-          `Email delivery failed for outbox id=${entry.id}, attempts=${failedAttempts}, status=${entry.status}`,
+          `Email delivery failed for outbox id=${entry.id}, attempts=${failedAttempts}, status=${entry.status}, error=${entry.lastError}`,
         );
       }
     }

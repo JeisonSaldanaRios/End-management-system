@@ -85,6 +85,12 @@ describe('AdmissionRequestService', () => {
 
   beforeEach(() => {
     systemTimeService.now.mockReturnValue(new Date(NOW));
+    dataSource.getRepository.mockReturnValue({
+      findOne: jest.fn().mockResolvedValue(null),
+      findOneOrFail: jest.fn(),
+      save: jest.fn(),
+      create: jest.fn().mockImplementation((data: unknown) => data),
+    });
     service = new AdmissionRequestService(
       repository as never,
       dataSource as never,
@@ -103,6 +109,17 @@ describe('AdmissionRequestService', () => {
 
       await expect(service.createRequest({ ...BASE_REQUEST, campId: 1 })).rejects.toThrow(
         'Ya existe una solicitud con este correo para este campamento',
+      );
+    });
+
+    it('throws when a user with same email already exists in the camp', async () => {
+      repository.findByEmailAndCamp.mockResolvedValue(null);
+      dataSource.getRepository.mockReturnValue({
+        findOne: jest.fn().mockResolvedValue({ id: 123 }),
+      });
+
+      await expect(service.createRequest({ ...BASE_REQUEST, campId: 1 })).rejects.toThrow(
+        'Ya existe un usuario registrado con este correo en este campamento',
       );
     });
 
@@ -220,6 +237,18 @@ describe('AdmissionRequestService', () => {
 
       await expect(service.updateRequest(1, { email: 'other@test.com' })).rejects.toThrow(
         'Ya existe otra solicitud con este correo para este campamento',
+      );
+    });
+
+    it('throws when a user with same email already exists in the camp during update', async () => {
+      repository.findById.mockResolvedValue(BASE_REQUEST);
+      repository.findByEmailAndCamp.mockResolvedValue(null);
+      dataSource.getRepository.mockReturnValue({
+        findOne: jest.fn().mockResolvedValue({ id: 123 }),
+      });
+
+      await expect(service.updateRequest(1, { email: 'other@test.com' })).rejects.toThrow(
+        'Ya existe un usuario registrado con este correo en este campamento',
       );
     });
 
@@ -342,6 +371,36 @@ describe('AdmissionRequestService', () => {
       await expect(service.reviewByAdmin(1, 1, true, 10, 'RESOURCE_MANAGEMENT')).rejects.toThrow(
         'Esta persona ya fue aprobada en otro campamento',
       );
+    });
+
+    it('throws when a user with same email already exists in the camp during review', async () => {
+      repository.findById.mockResolvedValue({ ...BASE_REQUEST, status: 'PENDING_ADMIN' });
+      repository.findApprovedByEmailExcludingId.mockResolvedValue(null);
+      dataSource.getRepository.mockReturnValue({
+        findOne: jest.fn().mockResolvedValue({ id: 123, requestId: 999 }),
+      });
+
+      await expect(service.reviewByAdmin(1, 1, true, 10, 'RESOURCE_MANAGEMENT')).rejects.toThrow(
+        'Ya existe un usuario registrado con este correo en este campamento',
+      );
+    });
+
+    it('does not throw when the existing user with same email is the one from the current request', async () => {
+      repository.findById.mockResolvedValue({ ...BASE_REQUEST, status: 'PENDING_ADMIN', id: 1 });
+      repository.findApprovedByEmailExcludingId.mockResolvedValue(null);
+      repository.update.mockResolvedValue({ ...BASE_REQUEST, status: 'APPROVED' });
+      const userRepoMock = {
+        findOne: jest.fn().mockImplementation((args: any) => {
+          if (args?.where?.username) return Promise.resolve(null);
+          return Promise.resolve({ id: 123, requestId: 1 });
+        }),
+        create: jest.fn().mockImplementation((data: unknown) => data),
+        save: jest.fn().mockResolvedValue({}),
+      };
+      dataSource.getRepository.mockReturnValue(userRepoMock);
+
+      const result = await service.reviewByAdmin(1, 1, true, 10, 'RESOURCE_MANAGEMENT');
+      expect(result).toBeDefined();
     });
 
     it('throws when approving but no role assigned', async () => {

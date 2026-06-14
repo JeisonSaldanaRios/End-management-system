@@ -234,32 +234,71 @@ export class ExpeditionRepository {
     completedBy: number,
     now: Date,
     completedStatus: Extract<ExpeditionStatus, 'COMPLETED' | 'RETURNED_AFTER_LOST'>,
-  ): Promise<void> {
+  ): Promise<
+    Array<{
+      resourceTypeId: number;
+      resourceTypeName: string;
+      unit: string;
+      amount: string;
+    }>
+  > {
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
 
     try {
-      const lootRows = (await queryRunner.query(
+      const resourceTypes = (await queryRunner.query(
         `
-        SELECT resource_type_id, SUM(amount)::numeric(12,2) AS total_amount
-        FROM expedition_resource_obtained
-        WHERE expedition_id = $1
-        GROUP BY resource_type_id
+        SELECT id, name, unit_of_measure
+        FROM resource_type
+        WHERE category IN ('FOOD', 'WATER', 'MEDICAL', 'AMMUNITION')
+        ORDER BY RANDOM()
+        LIMIT 4
         `,
-        [expedition.id],
-      )) as Array<{ resource_type_id: number; total_amount: string }>;
+      )) as Array<{ id: number; name: string; unit_of_measure: string }>;
+
+      const lootRows: Array<{
+        resource_type_id: number;
+        resource_type_name: string;
+        unit: string;
+        total_amount: string;
+      }> = [];
+
+      for (const resourceType of resourceTypes) {
+        const randomAmount = (Math.random() * 14 + 1).toFixed(2);
+
+        await queryRunner.query(
+          `
+          INSERT INTO expedition_resource_obtained (
+            expedition_id,
+            resource_type_id,
+            amount,
+            recorded_by,
+            record_date
+          )
+          VALUES ($1, $2, $3, $4, $5)
+          `,
+          [expedition.id, resourceType.id, randomAmount, completedBy, now.toISOString()],
+        );
+
+        lootRows.push({
+          resource_type_id: resourceType.id,
+          resource_type_name: resourceType.name,
+          unit: resourceType.unit_of_measure,
+          total_amount: randomAmount,
+        });
+      }
 
       if (lootRows.length === 0) {
         const resourceTypes = (await queryRunner.query(
           `
-          SELECT id, category
+          SELECT id, name, unit_of_measure
           FROM resource_type
           WHERE category IN ('FOOD', 'WATER', 'MEDICAL', 'AMMUNITION')
           ORDER BY RANDOM()
           LIMIT 4
           `,
-        )) as Array<{ id: number; category: string }>;
+        )) as Array<{ id: number; name: string; unit_of_measure: string }>;
 
         for (const resourceType of resourceTypes) {
           const randomAmount = (Math.random() * 14 + 1).toFixed(2);
@@ -280,6 +319,8 @@ export class ExpeditionRepository {
 
           lootRows.push({
             resource_type_id: resourceType.id,
+            resource_type_name: resourceType.name,
+            unit: resourceType.unit_of_measure,
             total_amount: randomAmount,
           });
         }
@@ -339,6 +380,12 @@ export class ExpeditionRepository {
       );
 
       await queryRunner.commitTransaction();
+      return lootRows.map((row) => ({
+        resourceTypeId: row.resource_type_id,
+        resourceTypeName: row.resource_type_name,
+        unit: row.unit,
+        amount: row.total_amount,
+      }));
     } catch (error) {
       await queryRunner.rollbackTransaction();
       throw error;
