@@ -289,6 +289,41 @@ export class ExpeditionRepository {
         });
       }
 
+      if (lootRows.length === 0) {
+        const resourceTypes = (await queryRunner.query(
+          `
+          SELECT id, category
+          FROM resource_type
+          WHERE category IN ('FOOD', 'WATER', 'MEDICAL', 'AMMUNITION')
+          ORDER BY RANDOM()
+          LIMIT 4
+          `,
+        )) as Array<{ id: number; category: string }>;
+
+        for (const resourceType of resourceTypes) {
+          const randomAmount = (Math.random() * 14 + 1).toFixed(2);
+
+          await queryRunner.query(
+            `
+            INSERT INTO expedition_resource_obtained (
+              expedition_id,
+              resource_type_id,
+              amount,
+              recorded_by,
+              record_date
+            )
+            VALUES ($1, $2, $3, $4, $5)
+            `,
+            [expedition.id, resourceType.id, randomAmount, completedBy, now.toISOString()],
+          );
+
+          lootRows.push({
+            resource_type_id: resourceType.id,
+            total_amount: randomAmount,
+          });
+        }
+      }
+
       for (const row of lootRows) {
         await queryRunner.query(
           `

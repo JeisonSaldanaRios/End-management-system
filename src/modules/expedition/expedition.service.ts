@@ -246,6 +246,8 @@ export class ExpeditionService {
 
     await this.repository.markExpeditionCompleteNotificationsAsRead(id, expedition.campId);
 
+    await this.repository.markExpeditionCompleteNotificationsAsRead(id, expedition.campId);
+
     await this.syncParticipantPersonStatuses(id);
 
     const completed = await this.repository.findById(id);
