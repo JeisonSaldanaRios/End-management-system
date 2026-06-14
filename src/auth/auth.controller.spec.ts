@@ -38,7 +38,11 @@ describe('AuthController', () => {
       { username: 'u', password: 'p', campId: 1 },
       '1.1.1.1',
     );
-    expect(res.cookie).toHaveBeenCalledWith('auth_token', 'abc', expect.any(Object));
+    expect(res.cookie).toHaveBeenCalledWith(
+      'auth_token',
+      'abc',
+      expect.objectContaining({ path: '/' }),
+    );
   });
 
   it('logout throws when auth_token cookie is missing', async () => {
@@ -66,7 +70,10 @@ describe('AuthController', () => {
     });
 
     expect(service.logout).toHaveBeenCalledWith('from-refresh', '2.2.2.2');
-    expect(res.clearCookie).toHaveBeenCalledWith('auth_token', expect.any(Object));
+    expect(res.clearCookie).toHaveBeenCalledWith(
+      'auth_token',
+      expect.objectContaining({ path: '/' }),
+    );
   });
 
   it('checkSession returns active status payload', async () => {
