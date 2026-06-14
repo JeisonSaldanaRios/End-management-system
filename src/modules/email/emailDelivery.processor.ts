@@ -4,6 +4,7 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 import { EmailOutboxService } from './emailOutbox.service';
 import { EmailTemplateService } from './emailTemplate.service';
 import { SmtpEmailProvider } from './smtpEmail.provider';
+import { SystemTimeService } from '../systemTime/systemTime.service';
 
 const EMAIL_PROCESSOR_CRON = process.env.EMAIL_PROCESSOR_CRON ?? CronExpression.EVERY_MINUTE;
 const RETRY_DELAYS_MINUTES = [1, 5, 15, 60, 360] as const;
@@ -16,6 +17,7 @@ export class EmailDeliveryProcessor {
     private readonly outboxService: EmailOutboxService,
     private readonly templateService: EmailTemplateService,
     private readonly smtpEmailProvider: SmtpEmailProvider,
+    private readonly systemTimeService: SystemTimeService,
   ) {}
 
   @Cron(EMAIL_PROCESSOR_CRON)
@@ -25,7 +27,7 @@ export class EmailDeliveryProcessor {
     }
 
     const limit = this.resolveBatchSize();
-    const now = new Date();
+    const now = this.systemTimeService.now();
     const dueEmails = await this.outboxService.findDueForDelivery(limit, now);
 
     for (const entry of dueEmails) {
@@ -43,7 +45,7 @@ export class EmailDeliveryProcessor {
         });
 
         entry.status = 'SENT';
-        entry.sentAt = new Date();
+        entry.sentAt = this.systemTimeService.now();
         entry.lastError = null;
         await this.outboxService.save(entry);
       } catch (error) {
@@ -78,7 +80,7 @@ export class EmailDeliveryProcessor {
   private calculateNextAttemptDate(failedAttempts: number): Date {
     const index = Math.max(0, Math.min(failedAttempts - 1, RETRY_DELAYS_MINUTES.length - 1));
     const delayMinutes = RETRY_DELAYS_MINUTES[index]!;
-    const next = new Date();
+    const next = this.systemTimeService.now();
     next.setMinutes(next.getMinutes() + delayMinutes);
     return next;
   }
@@ -86,7 +88,7 @@ export class EmailDeliveryProcessor {
   private calculateProcessingLeaseDate(): Date {
     const parsed = Number.parseInt(process.env.EMAIL_PROCESSING_LEASE_MINUTES ?? '10', 10);
     const leaseMinutes = Number.isInteger(parsed) && parsed > 0 ? parsed : 10;
-    const next = new Date();
+    const next = this.systemTimeService.now();
     next.setMinutes(next.getMinutes() + leaseMinutes);
     return next;
   }

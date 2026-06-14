@@ -7,9 +7,10 @@ import { EmailOutboxRepository } from './emailOutbox.repository';
 import { EmailOutboxService } from './emailOutbox.service';
 import { EmailTemplateService } from './emailTemplate.service';
 import { SmtpEmailProvider } from './smtpEmail.provider';
+import { SystemTimeModule } from '../systemTime/systemTime.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([EmailOutboxEntity])],
+  imports: [TypeOrmModule.forFeature([EmailOutboxEntity]), SystemTimeModule],
   providers: [
     EmailOutboxRepository,
     EmailOutboxService,

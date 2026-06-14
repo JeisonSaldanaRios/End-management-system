@@ -1,4 +1,5 @@
 import { AchievementEvaluatorService } from './achievementEvaluator.service';
+import { SystemTimeService } from '../systemTime/systemTime.service';
 
 describe('AchievementEvaluatorService', () => {
   let service: AchievementEvaluatorService;
@@ -57,6 +58,15 @@ describe('AchievementEvaluatorService', () => {
     query: jest.fn(),
   };
 
+  const systemTimeService: jest.Mocked<SystemTimeService> = {
+    now: jest.fn().mockImplementation(() => new Date()),
+    nowIso: jest.fn().mockImplementation(() => new Date().toISOString()),
+    getOffset: jest.fn().mockReturnValue(0),
+    setOffset: jest.fn(),
+    advanceTime: jest.fn(),
+    resetTime: jest.fn(),
+  } as any;
+
   beforeEach(() => {
     jest.clearAllMocks();
     service = new AchievementEvaluatorService(
@@ -70,6 +80,7 @@ describe('AchievementEvaluatorService', () => {
       inventoryAlertRepo as any,
       inventoryMovementRepo as any,
       notificationRepo as any,
+      systemTimeService,
     );
   });
 

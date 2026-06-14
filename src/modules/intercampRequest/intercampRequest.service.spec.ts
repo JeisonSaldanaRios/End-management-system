@@ -1,5 +1,6 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { IntercampRequestService } from './intercampRequest.service';
+import { SystemTimeService } from '../systemTime/systemTime.service';
 
 
 const repository = {
@@ -40,6 +41,15 @@ const transferPersonService = {
 };
 
 
+const systemTimeService: jest.Mocked<SystemTimeService> = {
+  now: jest.fn().mockReturnValue(new Date()),
+  nowIso: jest.fn(),
+  getOffset: jest.fn(),
+  setOffset: jest.fn(),
+  advanceTime: jest.fn(),
+  resetTime: jest.fn(),
+} as any;
+
 describe('IntercampRequestService', () => {
   let service: IntercampRequestService;
 
@@ -59,6 +69,7 @@ describe('IntercampRequestService', () => {
       notificationService as never,
       transferService as never,
       transferPersonService as never,
+      systemTimeService,
     );
   });
 

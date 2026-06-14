@@ -3,6 +3,7 @@ import { Reflector } from '@nestjs/core';
 import type { Request, Response } from 'express';
 
 import { AuthService } from '../../auth/auth.service';
+import { getAuthCookieOptions } from '../../auth/auth-cookie.options';
 
 @Injectable()
 export class AuthGuard implements CanActivate {
@@ -36,11 +37,7 @@ export class AuthGuard implements CanActivate {
     const payload = await this.authService.validateSession(token, request.ip ?? 'unknown');
     if (shouldRefreshSession) {
       const newToken = await this.authService.rotateSessionToken(token, payload);
-      response.cookie('auth_token', newToken, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'strict',
-      });
+      response.cookie('auth_token', newToken, getAuthCookieOptions());
       (request as Request & { refreshedToken?: string }).refreshedToken = newToken;
     }
 

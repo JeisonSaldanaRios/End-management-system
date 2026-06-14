@@ -17,10 +17,9 @@ describe('SystemTimeService - Offset Management (unit tests)', () => {
       expect(typeof service.getOffset()).toBe('number');
     });
 
-    it('returns 0 after reset', () => {
+    it('throws on reset', () => {
       service.addOffset(5000);
-      service.resetOffset();
-      expect(service.getOffset()).toBe(0);
+      expect(() => service.resetOffset()).toThrow('Resetting the time offset is not allowed.');
     });
   });
 
@@ -72,23 +71,8 @@ describe('SystemTimeService - Offset Management (unit tests)', () => {
   });
 
   describe('resetOffset()', () => {
-    it('clears offset to 0', () => {
-      service.addOffset(10000);
-      service.resetOffset();
-      expect(service.getOffset()).toBe(0);
-    });
-
-    it('resets after multiple additions', () => {
-      service.addOffset(1000);
-      service.addOffset(2000);
-      service.addOffset(3000);
-      service.resetOffset();
-      expect(service.getOffset()).toBe(0);
-    });
-
-    it('returns void', () => {
-      const result = service.resetOffset();
-      expect(result).toBeUndefined();
+    it('throws error', () => {
+      expect(() => service.resetOffset()).toThrow('Resetting the time offset is not allowed.');
     });
   });
 
@@ -120,19 +104,8 @@ describe('SystemTimeService - Offset Management (unit tests)', () => {
       expect(diff).toBeLessThanOrEqual(totalOffset + 200);
     });
 
-    it('reset offset makes now() return to real time', (done) => {
-      service.addOffset(10000);
-      const offsetTime = service.now().getTime();
-      service.resetOffset();
-
-      setTimeout(() => {
-        const resetTime = service.now().getTime();
-        // After reset, time should be close to real current time (not offset)
-        const currentReal = Date.now();
-        const diff = Math.abs(resetTime - currentReal);
-        expect(diff).toBeLessThan(100);
-        done();
-      }, 10);
+    it('throws error when adding a negative offset', () => {
+      expect(() => service.addOffset(-1000)).toThrow('Cannot reduce the time offset.');
     });
   });
 
@@ -224,7 +197,6 @@ describe('SystemTimeService - Offset Management (unit tests)', () => {
     it('getServerTime returns valid time after offset operations', () => {
       service.addOffset(3600000);
       service.addOffset(1800000);
-      service.resetOffset();
 
       const result = service.getServerTime();
       expect(result).toHaveProperty('serverTime');

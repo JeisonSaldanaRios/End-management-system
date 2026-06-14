@@ -51,5 +51,6 @@ import { TemporalAutomationService } from './temporalAutomation.service';
     ExpeditionParticipantRepository,
     ExpeditionRepository,
   ],
+  exports: [TemporalAutomationService],
 })
 export class TemporalAutomationModule {}

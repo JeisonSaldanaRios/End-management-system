@@ -3,6 +3,7 @@ import { TransferPersonService } from '../transferPerson/transferPerson.service'
 import { TransferService } from '../transfer/transfer.service';
 import { NotificationService } from '../notification/notification.service';
 import { IntercampRequestRepository } from './intercampRequest.repository';
+import { SystemTimeService } from '../systemTime/systemTime.service';
 import type {
   CreateIntercampRequestDTO,
   IntercampRequest,
@@ -23,6 +24,7 @@ export class IntercampRequestService {
     private readonly notificationService: NotificationService,
     private readonly transferService: TransferService,
     private readonly transferPersonService: TransferPersonService,
+    private readonly systemTimeService: SystemTimeService,
   ) {}
 
   private resolvePlannedTransferDates(request: IntercampRequest): {
@@ -36,7 +38,7 @@ export class IntercampRequestService {
     const plannedDepartureDate = request.plannedDepartureDate;
     const plannedArrivalDate = request.plannedArrivalDate;
 
-    if (plannedDepartureDate.getTime() < Date.now()) {
+    if (plannedDepartureDate.getTime() < this.systemTimeService.now().getTime()) {
       throw new BadRequestException(
         'No se puede aprobar una solicitud con la fecha planeada en el pasado',
       );
@@ -171,7 +173,7 @@ export class IntercampRequestService {
 
         if (
           existing.plannedDepartureDate &&
-          existing.plannedDepartureDate.getTime() <= Date.now()
+          existing.plannedDepartureDate.getTime() <= this.systemTimeService.now().getTime()
         ) {
           throw new BadRequestException(
             'No se puede cancelar una solicitud aprobada despues de la salida planeada',
@@ -489,7 +491,7 @@ export class IntercampRequestService {
       respondedBy:
         data.status !== undefined ? actor.userId : (data.respondedBy ?? existing.respondedBy),
       responseDate:
-        data.status !== undefined ? new Date() : (data.responseDate ?? existing.responseDate),
+        data.status !== undefined ? this.systemTimeService.now() : (data.responseDate ?? existing.responseDate),
     };
     const respondedBy =
       persistedData.respondedBy !== undefined ? persistedData.respondedBy : existing.respondedBy;
