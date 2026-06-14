@@ -264,8 +264,6 @@ export class TemporalAutomationService {
           await this.notifyExpeditionStatusChange(expedition, previousStatus);
         }
       }
-
-      await this.notifyParticipantsToCompleteIfPastReturn(expedition, now);
     }
   }
 
@@ -294,8 +292,19 @@ export class TemporalAutomationService {
       } catch (error) {
         const message = error instanceof Error ? error.message : 'unknown error';
         this.logger.warn(
-          `No se pudo ejecutar automaticamente el traslado ${transfer.id}: ${message}. El traslado permanece en PENDING_DEPARTURE para revision manual.`,
+          `No se pudo ejecutar automaticamente el traslado ${transfer.id}: ${message}`,
         );
+
+        try {
+          await this.transferService.updateTransfer(transfer.id, { status: 'CANCELED' });
+        } catch (cancelErr) {
+          this.logger.warn(
+            `Falló al cancelar automáticamente el traslado ${transfer.id}: ${
+              cancelErr instanceof Error ? cancelErr.message : 'unknown error'
+            }`,
+          );
+        }
+
         try {
           const rows = (await this.transferRepo.query(
             `SELECT r.origin_camp_id AS origin, r.destination_camp_id AS destination
@@ -316,8 +325,8 @@ export class TemporalAutomationService {
             sourceId: number;
           } = {
             type: 'TRANSFER_EXECUTION_FAILED',
-            title: 'Traslado requiere atención manual',
-            message: `El traslado #${transfer.id} no pudo ejecutarse automaticamente y requiere revision manual: ${message}`,
+            title: 'Ejecución de traslado fallida',
+            message: `El traslado #${transfer.id} no pudo ejecutarse automaticamente: ${message}`,
             sourceType: 'transfer',
             sourceId: transfer.id,
           };
@@ -673,53 +682,6 @@ export class TemporalAutomationService {
       message: `Tu expedicion ${expedition.name} ahora esta en estado ${expedition.status}.`,
       sourceType: 'expedition',
       sourceId: expedition.id,
-    });
-  }
-
-  private async notifyParticipantsToCompleteIfPastReturn(
-    expedition: ExpeditionEntity,
-    now: Date,
-  ): Promise<void> {
-    const terminalStatuses = ['COMPLETED', 'CANCELED', 'RETURNED_AFTER_LOST'];
-    if (
-      terminalStatuses.includes(expedition.status) ||
-      now.getTime() < expedition.plannedReturnDate.getTime()
-    ) {
-      return;
-    }
-
-    const alreadyNotified =
-      await this.temporalAutomationRepository.hasExpeditionCompleteNotificationPending(
-        expedition.id,
-        expedition.campId,
-      );
-    if (alreadyNotified) {
-      return;
-    }
-
-    const personIds = await this.expeditionParticipantRepository.getActivePersonIdsByExpedition(
-      expedition.id,
-    );
-    if (personIds.length === 0) {
-      return;
-    }
-
-    const userIds = await this.temporalAutomationRepository.findActiveUserIdsByCampAndPersonIds(
-      expedition.campId,
-      personIds,
-    );
-    if (userIds.length === 0) {
-      return;
-    }
-
-    await this.notificationService.notifyUsers(userIds, {
-      campId: expedition.campId,
-      type: 'EXPEDITION_COMPLETED',
-      title: 'Expedicion lista para completar',
-      message: `La expedicion "${expedition.name}" ha finalizado su tiempo estimado. Confirma el regreso del equipo para generar el botin obtenido.`,
-      sourceType: 'expedition_complete_pending',
-      sourceId: expedition.id,
-      sendEmail: false,
     });
   }
 }

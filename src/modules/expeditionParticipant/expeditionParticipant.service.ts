@@ -154,12 +154,11 @@ export class ExpeditionParticipantService {
         'PLANNED',
         'IN_PROGRESS',
         'DELAYED',
-        'LOST',
       ]);
 
     if (alreadyInActiveExpedition) {
       throw new BadRequestException(
-        'Esta persona ya esta asignada a una expedicion no finalizada y no puede ser asignada a otra',
+        'Esta persona ya esta asignada a una expedicion activa o planificada y no puede ser asignada a otra',
       );
     }
 

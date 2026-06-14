@@ -83,10 +83,43 @@ export class ExpeditionResourceObtainedService {
   async createRecord(
     data: CreateExpeditionResourceObtainedDTO,
   ): Promise<ExpeditionResourceObtained> {
-    void data;
-    throw new ForbiddenException(
-      'Expedition loot is generated automatically when the expedition is completed',
+    await this.validateRecorder(
+      data.expeditionId,
+      data.recordedBy,
+      data.resourceTypeId,
+      data.movementId,
     );
+
+    const expedition = await this.repository.findExpeditionById(data.expeditionId);
+    if (!expedition) {
+      throw new NotFoundException('Expedicion no encontrada');
+    }
+
+    const validStatuses = ['IN_PROGRESS', 'DELAYED', 'COMPLETED'];
+    if (!validStatuses.includes(expedition.status)) {
+      throw new BadRequestException(
+        `No se pueden registrar recursos obtenidos en una expedicion con estado ${expedition.status}. ` +
+          `Estado valido: ${validStatuses.join(', ')}`,
+      );
+    }
+
+    const created = await this.repository.create(data);
+
+    if (expedition) {
+      await this.notificationService.notifyCampRoles(
+        expedition.campId,
+        ['RESOURCE_MANAGEMENT', 'SYSTEM_ADMIN', 'TRAVEL_MANAGER'],
+        {
+          type: 'EXPEDITION_RESOURCE_OBTAINED',
+          title: 'Recursos obtenidos en expedicion',
+          message: `Se registro el recurso obtenido ${data.resourceTypeId} con cantidad ${data.amount} en la expedicion ${data.expeditionId}.`,
+          sourceType: 'expedition_resource_obtained',
+          sourceId: created.id,
+        },
+      );
+    }
+
+    return created;
   }
 
   async getRecordById(id: number): Promise<ExpeditionResourceObtained | null> {
@@ -126,11 +159,47 @@ export class ExpeditionResourceObtainedService {
     id: number,
     data: UpdateExpeditionResourceObtainedDTO,
   ): Promise<ExpeditionResourceObtained | null> {
-    void id;
-    void data;
-    throw new ForbiddenException(
-      'Expedition loot records cannot be updated manually because loot is generated automatically',
-    );
+    const existing = await this.repository.findById(id);
+    if (!existing) return null;
+
+    const expeditionId = data.expeditionId ?? existing.expeditionId;
+    const recordedBy = data.recordedBy ?? existing.recordedBy;
+    const resourceTypeId = data.resourceTypeId ?? existing.resourceTypeId;
+    const movementId = data.movementId !== undefined ? data.movementId : existing.movementId;
+    await this.validateRecorder(expeditionId, recordedBy, resourceTypeId, movementId);
+
+    const expedition = await this.repository.findExpeditionById(expeditionId);
+    if (!expedition) {
+      throw new NotFoundException('Expedicion no encontrada');
+    }
+
+    const validStatuses = ['IN_PROGRESS', 'DELAYED', 'COMPLETED'];
+    if (!validStatuses.includes(expedition.status)) {
+      throw new BadRequestException(
+        `No se pueden actualizar recursos obtenidos en una expedicion con estado ${expedition.status}`,
+      );
+    }
+
+    const updated = await this.repository.update(id, data);
+    if (!updated) {
+      return null;
+    }
+
+    if (expedition) {
+      await this.notificationService.notifyCampRoles(
+        expedition.campId,
+        ['RESOURCE_MANAGEMENT', 'SYSTEM_ADMIN', 'TRAVEL_MANAGER'],
+        {
+          type: 'EXPEDITION_RESOURCE_OBTAINED',
+          title: 'Recursos obtenidos en expedicion actualizados',
+          message: `Se actualizo el registro de recursos obtenidos ${updated.resourceTypeId} en la expedicion ${updated.expeditionId}.`,
+          sourceType: 'expedition_resource_obtained',
+          sourceId: updated.id,
+        },
+      );
+    }
+
+    return updated;
   }
 
   async deleteRecord(id: number): Promise<boolean> {
