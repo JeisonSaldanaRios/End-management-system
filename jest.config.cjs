@@ -40,4 +40,6 @@ module.exports = {
     },
   },
   clearMocks: true,
+  logHeapUsage: true,
+  workerIdleMemoryLimit: '512MB',
 };
