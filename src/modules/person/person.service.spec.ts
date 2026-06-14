@@ -274,7 +274,7 @@ describe('PersonService', () => {
 
     it('sets userId if linkedUser exists in DB', async () => {
       repository.findById.mockResolvedValue({ id: 1 });
-      repository.findLinkedUserByPersonId.mockResolvedValue({ id: 42 });
+      repository.findLinkedUserByPersonId.mockResolvedValue({ id: 42, role: 'WORKER', status: 'ACTIVE', username: 'mockuser' });
 
       const result = await service.getPersonWithSignedUrl(1);
 
@@ -294,13 +294,10 @@ describe('PersonService', () => {
   // ─── getAllPersons ──────────────────────────────────────────────────────
 
   describe('getAllPersons', () => {
-    it('uses default pagination if not provided', async () => {
+    it('does not apply pagination if page or limit are not provided', async () => {
       repository.findAllAndCount.mockResolvedValue({ data: [], total: 0 });
       await service.getAllPersons();
-      expect(repository.findAllAndCount).toHaveBeenCalledWith({
-        offset: 0,
-        limit: 10,
-      });
+      expect(repository.findAllAndCount).toHaveBeenCalledWith({});
     });
 
     it('passes custom filters and pagination correctly', async () => {

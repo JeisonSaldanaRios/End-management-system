@@ -7,6 +7,7 @@ import { OccupationCoverageService } from '../occupationCoverage/occupationCover
 import { OccupationEntity } from '../occupation/occupation.entity';
 import { PersonEntity } from '../person/person.entity';
 import { UserEntity } from '../systemUser/systemUser.entity';
+import { SystemTimeService } from '../systemTime/systemTime.service';
 
 import { TemporaryOccupationAssignmentRepository } from './temporaryOccupationAssignment.repository';
 import type {
@@ -22,6 +23,7 @@ export class TemporaryOccupationAssignmentService {
     private readonly dataSource: DataSource,
     private readonly notificationService: NotificationService,
     private readonly coverageService: OccupationCoverageService,
+    private readonly systemTimeService?: SystemTimeService,
   ) {}
 
   private async notifyAssignmentChange(
@@ -143,7 +145,29 @@ export class TemporaryOccupationAssignmentService {
   }
 
   async getAssignmentById(id: number): Promise<TemporaryOccupationAssignment | null> {
-    return await this.repository.findById(id);
+    const assignment = await this.repository.findById(id);
+    if (!assignment) {
+      return null;
+    }
+    const now = this.systemTimeService ? this.systemTimeService.now() : new Date();
+    const endDateObj = assignment.endDate ? new Date(assignment.endDate) : null;
+    let isExpired = false;
+    if (endDateObj) {
+      const endYear = endDateObj.getUTCFullYear();
+      const endMonth = endDateObj.getUTCMonth();
+      const endDateVal = endDateObj.getUTCDate();
+
+      const nowYear = now.getUTCFullYear();
+      const nowMonth = now.getUTCMonth();
+      const nowDateVal = now.getUTCDate();
+
+      const endMidnight = Date.UTC(endYear, endMonth, endDateVal);
+      const nowMidnight = Date.UTC(nowYear, nowMonth, nowDateVal);
+
+      isExpired = endMidnight < nowMidnight;
+    }
+    const status: 'ACTIVA' | 'FINALIZADA' = isExpired ? 'FINALIZADA' : 'ACTIVA';
+    return { ...assignment, status };
   }
 
   async getAllAssignments(filters?: {
@@ -174,7 +198,29 @@ export class TemporaryOccupationAssignmentService {
     }
     if (filters?.assignedBy !== undefined) repoFilters.assignedBy = filters.assignedBy;
 
-    return await this.repository.findAllAndCount(repoFilters);
+    const result = await this.repository.findAllAndCount(repoFilters);
+    const now = this.systemTimeService ? this.systemTimeService.now() : new Date();
+    const data = result.data.map((assignment) => {
+      const endDateObj = assignment.endDate ? new Date(assignment.endDate) : null;
+      let isExpired = false;
+      if (endDateObj) {
+        const endYear = endDateObj.getUTCFullYear();
+        const endMonth = endDateObj.getUTCMonth();
+        const endDateVal = endDateObj.getUTCDate();
+
+        const nowYear = now.getUTCFullYear();
+        const nowMonth = now.getUTCMonth();
+        const nowDateVal = now.getUTCDate();
+
+        const endMidnight = Date.UTC(endYear, endMonth, endDateVal);
+        const nowMidnight = Date.UTC(nowYear, nowMonth, nowDateVal);
+
+        isExpired = endMidnight < nowMidnight;
+      }
+      const status: 'ACTIVA' | 'FINALIZADA' = isExpired ? 'FINALIZADA' : 'ACTIVA';
+      return { ...assignment, status };
+    });
+    return { data, total: result.total };
   }
 
   async updateAssignment(
