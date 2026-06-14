@@ -6,7 +6,6 @@ export interface TemporaryOccupationAssignment {
   endDate: Date | null;
   reason: string;
   assignedBy: number;
-  status?: 'ACTIVA' | 'FINALIZADA';
 }
 
 export interface CreateTemporaryOccupationAssignmentDTO {

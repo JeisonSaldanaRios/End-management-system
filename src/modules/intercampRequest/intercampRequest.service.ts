@@ -559,16 +559,7 @@ export class IntercampRequestService {
     const statusChanged = updated.status !== existing.status;
     if (statusChanged) {
       if (updated.status === 'APPROVED') {
-        try {
-          await this.ensureApprovedRequestTransfer(updated, transportPersonIds);
-        } catch (error) {
-          await this.repository.update(id, {
-            status: existing.status,
-            respondedBy: existing.respondedBy,
-            responseDate: existing.responseDate,
-          });
-          throw error;
-        }
+        await this.ensureApprovedRequestTransfer(updated, transportPersonIds);
       }
 
       const notificationType =

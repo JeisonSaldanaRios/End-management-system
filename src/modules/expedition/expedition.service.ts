@@ -115,18 +115,6 @@ export class ExpeditionService {
     });
   }
 
-  private formatLootSummary(
-    loot: Array<{ resourceTypeName: string; unit: string; amount: string }> | undefined,
-  ): string {
-    if (!loot || loot.length === 0) {
-      return 'No se obtuvieron recursos.';
-    }
-
-    return loot
-      .map((item) => `${item.amount} ${item.unit} de ${item.resourceTypeName}`)
-      .join(', ');
-  }
-
   async createExpedition(data: CreateExpeditionDTO): Promise<Expedition> {
     await assertEntityExists(this.dataSource, CampEntity, data.campId, 'Camp');
 
@@ -237,14 +225,12 @@ export class ExpeditionService {
 
     const completedStatus = expedition.status === 'LOST' ? 'RETURNED_AFTER_LOST' : 'COMPLETED';
 
-    const loot = await this.repository.completeExplorationWithLoot(
+    await this.repository.completeExplorationWithLoot(
       expedition,
       completedBy,
       now,
       completedStatus,
-    ) ?? [];
-
-    await this.repository.markExpeditionCompleteNotificationsAsRead(id, expedition.campId);
+    );
 
     await this.repository.markExpeditionCompleteNotificationsAsRead(id, expedition.campId);
 
@@ -253,26 +239,6 @@ export class ExpeditionService {
     const completed = await this.repository.findById(id);
     if (!completed) {
       return null;
-    }
-
-    const lootSummary = this.formatLootSummary(loot);
-    const participantPersonIds = await this.repository.getActiveParticipantPersonIds(id);
-    const participantUserIds =
-      (await this.repository.findUserIdsByCampAndPersonIds(
-        completed.campId,
-        participantPersonIds,
-      )) ?? [];
-
-    if (participantUserIds.length > 0) {
-      await this.notificationService.notifyUsers(participantUserIds, {
-        campId: completed.campId,
-        type: 'EXPEDITION_RESOURCE_OBTAINED',
-        title: 'Botin de expedicion obtenido',
-        message: `La expedicion ${completed.name} regreso con: ${lootSummary}`,
-        sourceType: 'expedition',
-        sourceId: completed.id,
-        sendEmail: false,
-      });
     }
 
     await this.notificationService.notifyCampRoles(
@@ -289,15 +255,6 @@ export class ExpeditionService {
         sourceId: completed.id,
       },
     );
-
-    await this.notificationService.notifyCampRoles(completed.campId, ['RESOURCE_MANAGEMENT'], {
-      type: 'EXPEDITION_RESOURCE_OBTAINED',
-      title: 'Recursos agregados al inventario',
-      message: `La expedicion ${completed.name} agrego al inventario: ${lootSummary}`,
-      sourceType: 'expedition',
-      sourceId: completed.id,
-      sendEmail: false,
-    });
 
     return completed;
   }

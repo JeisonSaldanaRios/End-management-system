@@ -27,12 +27,6 @@ function makeEntry(overrides: Partial<EmailOutboxEntity> = {}): EmailOutboxEntit
 }
 
 test.describe('Email Delivery Processor options', () => {
-  test.beforeEach(() => {
-    delete process.env.EMAIL_PROVIDER;
-    delete process.env.RESEND_API_KEY;
-    delete process.env.SENDGRID_API_KEY;
-  });
-
   test('skips processing when EMAIL_ENABLED is false', async () => {
     process.env.EMAIL_ENABLED = 'false';
 
@@ -269,12 +263,6 @@ test.describe('Email Delivery Processor options', () => {
 });
 
 test.describe('SMTP provider options', () => {
-  test.beforeEach(() => {
-    delete process.env.EMAIL_PROVIDER;
-    delete process.env.RESEND_API_KEY;
-    delete process.env.SENDGRID_API_KEY;
-  });
-
   test('isEnabled reflects EMAIL_ENABLED value', () => {
     const provider = new SmtpEmailProvider();
 

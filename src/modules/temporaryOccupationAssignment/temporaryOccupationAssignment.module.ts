@@ -2,7 +2,6 @@ import { Module, OnModuleInit, Inject } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { NotificationModule } from '../notification/notification.module';
 import { OccupationCoverageModule } from '../occupationCoverage/occupationCoverage.module';
-import { SystemTimeModule } from '../systemTime/systemTime.module';
 
 import { TemporaryOccupationAssignmentController } from './temporaryOccupationAssignment.controller';
 import { TemporaryOccupationAssignmentEntity } from './temporaryOccupationAssignment.entity';
@@ -15,7 +14,6 @@ import { OccupationCoverageService } from '../occupationCoverage/occupationCover
     TypeOrmModule.forFeature([TemporaryOccupationAssignmentEntity]),
     NotificationModule,
     OccupationCoverageModule,
-    SystemTimeModule,
   ],
   controllers: [TemporaryOccupationAssignmentController],
   providers: [TemporaryOccupationAssignmentRepository, TemporaryOccupationAssignmentService],

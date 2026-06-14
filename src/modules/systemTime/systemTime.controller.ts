@@ -176,11 +176,6 @@ export class SystemTimeController {
       automations.push(`Executed ${midnightsPassed} daily resource cycle(s)`);
     }
 
-    const transfersProcessed = await this.processDueTransfers();
-    if (transfersProcessed > 0) {
-      automations.push(`Processed ${transfersProcessed} due transfer(s)`);
-    }
-
     const expeditionsUpdated = await this.updateExpeditionStates();
     if (expeditionsUpdated > 0) {
       automations.push(`Updated states for ${expeditionsUpdated} expedition(s)`);
@@ -197,25 +192,6 @@ export class SystemTimeController {
     }
 
     return automations;
-  }
-
-  private async processDueTransfers(): Promise<number> {
-    const temporalAutomationService = this.moduleRef.get(TemporalAutomationService, {
-      strict: false,
-    });
-
-    if (!temporalAutomationService) {
-      this.logger.warn('TemporalAutomationService not available for transfer processing');
-      return 0;
-    }
-
-    try {
-      await temporalAutomationService.runDueTransferExecutions();
-      return 1;
-    } catch (error) {
-      this.logger.warn('Error processing due transfers:', error);
-      return 0;
-    }
   }
 
   private calculateMidnightsPassed(beforeTime: Date, afterTime: Date): number {
