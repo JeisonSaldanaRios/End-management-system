@@ -523,23 +523,18 @@ export class TransferService {
         }
 
         if (updated.status === 'COMPLETED') {
-          if (existing.status === 'PENDING_DEPARTURE') {
-            await this.repository.setManifestInTransitWithManager(
-              manager,
-              updated.id,
-              updated.actualDepartureDate ?? new Date(),
-            );
+          const skipFromPending = existing.status === 'PENDING_DEPARTURE';
+          const departureDate = updated.actualDepartureDate ?? existing.plannedDepartureDate ?? new Date();
+          const arrivalDate = updated.actualArrivalDate ?? new Date();
+
+          if (skipFromPending) {
+            await this.repository.setManifestInTransitWithManager(manager, updated.id, departureDate);
             await this.applyTransferRations(manager, updated, actorUserId);
             await this.applyTransferSentInventory(manager, updated.id, updated.requestId, actorUserId);
           }
 
           await this.applyTransferReceivedInventory(manager, updated.id, updated.requestId, actorUserId);
-          await this.repository.completeManifestWithManager(
-            manager,
-            updated.id,
-            updated.requestId,
-            updated.actualArrivalDate ?? new Date(),
-          );
+          await this.repository.completeManifestWithManager(manager, updated.id, updated.requestId, arrivalDate);
         }
 
         if (updated.status === 'CANCELED') {

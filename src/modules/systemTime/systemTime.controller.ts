@@ -103,7 +103,7 @@ export class SystemTimeController {
       try {
         const automationPromise = this.executeTimeAutomations(oldSystemTime, newSystemTime);
         const timeoutPromise = new Promise<string[]>((resolve) => {
-          setTimeout(() => resolve(['Automations execution timed out']), 5000);
+          setTimeout(() => resolve(['Automations execution timed out']), 60000);
         });
         const result = await Promise.race([automationPromise, timeoutPromise]);
         automations.push(...result);
