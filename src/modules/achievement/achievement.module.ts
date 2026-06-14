@@ -14,6 +14,7 @@ import { IntercampRequestEntity } from '../intercampRequest/intercampRequest.ent
 import { InventoryAlertEntity } from '../inventoryAlert/inventoryAlert.entity';
 import { InventoryMovementEntity } from '../inventoryMovement/inventoryMovement.entity';
 import { NotificationEntity } from '../notification/notification.entity';
+import { SystemTimeModule } from '../systemTime/systemTime.module';
 
 @Module({
   imports: [
@@ -28,6 +29,7 @@ import { NotificationEntity } from '../notification/notification.entity';
     ]),
     CampModule,
     CampAchievementModule,
+    SystemTimeModule,
   ],
   controllers: [AchievementController],
   providers: [AchievementRepository, AchievementService, AchievementEvaluatorService],

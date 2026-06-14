@@ -6,6 +6,7 @@ import { OccupationCoverageService } from './occupationCoverage.service';
 import { NotificationService } from '../notification/notification.service';
 import { TemporaryOccupationAssignmentEntity } from '../temporaryOccupationAssignment/temporaryOccupationAssignment.entity';
 import { PersonEntity } from '../person/person.entity';
+import { SystemTimeService } from '../systemTime/systemTime.service';
 
 @Injectable()
 export class OccupationCoverageScheduler {
@@ -15,6 +16,7 @@ export class OccupationCoverageScheduler {
     private readonly coverageService: OccupationCoverageService,
     private readonly dataSource: DataSource,
     private readonly notificationService: NotificationService,
+    private readonly systemTimeService: SystemTimeService,
   ) {}
 
   @Cron(CronExpression.EVERY_30_MINUTES)
@@ -78,7 +80,7 @@ export class OccupationCoverageScheduler {
                   personId: topSuggestion.personId,
                   temporaryOccupationId: occupation.occupationId,
                   assignedBy: systemAdmin[0].id,
-                  startDate: new Date(),
+                  startDate: this.systemTimeService.now(),
                   endDate: null,
                   reason: 'Cobertura automatica por deficit critico',
                 }),

@@ -19,6 +19,8 @@ import { SystemTimeOffsetResponseDto } from './dto/system-time-offset-response.d
 import { TemporalAutomationService } from '../temporalAutomation/temporalAutomation.service';
 import { ExpeditionService } from '../expedition/expedition.service';
 import { NotificationService } from '../notification/notification.service';
+import { OccupationCoverageScheduler } from '../occupationCoverage/occupationCoverage.scheduler';
+import { AchievementEvaluatorService } from '../achievement/achievementEvaluator.service';
 import { ExpeditionEntity } from '../expedition/expedition.entity';
 import { SessionEntity } from '../session/session.entity';
 import { PasswordResetTokenEntity } from '../../auth/passwordResetToken.entity';
@@ -181,9 +183,34 @@ export class SystemTimeController {
       automations.push(`Processed ${transfersProcessed} due transfer(s)`);
     }
 
-    const expeditionsUpdated = await this.updateExpeditionStates();
-    if (expeditionsUpdated > 0) {
-      automations.push(`Updated states for ${expeditionsUpdated} expedition(s)`);
+    const hoursPassed = this.calculateIntervalsPassed(oldTime, newTime, 60);
+    if (hoursPassed > 0) {
+      const expeditionsUpdated = await this.executeHourlyCycles(hoursPassed);
+      if (expeditionsUpdated > 0) {
+        automations.push(`Updated states for ${expeditionsUpdated} expedition(s) across ${hoursPassed} hourly cycle(s)`);
+      }
+    } else {
+      // Even if less than 1 hour passed, run one state update to catch anything due
+      const expeditionsUpdated = await this.updateExpeditionStates();
+      if (expeditionsUpdated > 0) {
+        automations.push(`Updated states for ${expeditionsUpdated} expedition(s)`);
+      }
+    }
+
+    const halfHoursPassed = this.calculateIntervalsPassed(oldTime, newTime, 30);
+    if (halfHoursPassed > 0) {
+      const coverageRan = await this.executeOccupationCoverageCycles(halfHoursPassed);
+      if (coverageRan > 0) {
+        automations.push(`Ran ${coverageRan} occupation coverage check(s)`);
+      }
+    }
+
+    const tenMinutesPassed = this.calculateIntervalsPassed(oldTime, newTime, 10);
+    if (tenMinutesPassed > 0) {
+      const achievementCycles = await this.executeAchievementCycles(tenMinutesPassed);
+      if (achievementCycles > 0) {
+        automations.push(`Ran ${achievementCycles} achievement evaluation cycle(s)`);
+      }
     }
 
     const sessionsClosed = await this.closeExpiredSessions();
@@ -346,5 +373,82 @@ export class SystemTimeController {
       this.logger.warn('Error invalidating tokens:', error);
       return 0;
     }
+  }
+
+  private calculateIntervalsPassed(beforeTime: Date, afterTime: Date, intervalMinutes: number): number {
+    const intervalMs = intervalMinutes * 60 * 1000;
+    const before = beforeTime.getTime();
+    const after = afterTime.getTime();
+
+    // Round before up to next interval boundary, then count how many fit before after
+    const firstBoundary = Math.ceil(before / intervalMs) * intervalMs;
+    if (firstBoundary > after) return 0;
+
+    return Math.floor((after - firstBoundary) / intervalMs) + 1;
+  }
+
+  private async executeHourlyCycles(count: number): Promise<number> {
+    const temporalAutomationService = this.moduleRef.get(TemporalAutomationService, {
+      strict: false,
+    });
+
+    if (!temporalAutomationService) {
+      this.logger.warn('TemporalAutomationService not available for hourly cycles');
+      return 0;
+    }
+
+    let totalUpdated = 0;
+    for (let i = 0; i < count; i++) {
+      try {
+        await temporalAutomationService.runHourlyExpeditionStateUpdate();
+        this.logger.debug(`Hourly expedition cycle ${i + 1}/${count} completed`);
+        totalUpdated++;
+      } catch (error) {
+        this.logger.warn(`Error in hourly expedition cycle ${i + 1}:`, error);
+      }
+    }
+    return totalUpdated;
+  }
+
+  private async executeOccupationCoverageCycles(count: number): Promise<number> {
+    const occupationScheduler = this.moduleRef.get(OccupationCoverageScheduler, { strict: false });
+
+    if (!occupationScheduler) {
+      this.logger.warn('OccupationCoverageScheduler not available');
+      return 0;
+    }
+
+    let ran = 0;
+    for (let i = 0; i < count; i++) {
+      try {
+        await occupationScheduler.checkCriticalOccupations();
+        this.logger.debug(`Occupation coverage cycle ${i + 1}/${count} completed`);
+        ran++;
+      } catch (error) {
+        this.logger.warn(`Error in occupation coverage cycle ${i + 1}:`, error);
+      }
+    }
+    return ran;
+  }
+
+  private async executeAchievementCycles(count: number): Promise<number> {
+    const achievementEvaluator = this.moduleRef.get(AchievementEvaluatorService, { strict: false });
+
+    if (!achievementEvaluator) {
+      this.logger.warn('AchievementEvaluatorService not available');
+      return 0;
+    }
+
+    let ran = 0;
+    for (let i = 0; i < count; i++) {
+      try {
+        await achievementEvaluator.processAchievements();
+        this.logger.debug(`Achievement evaluation cycle ${i + 1}/${count} completed`);
+        ran++;
+      } catch (error) {
+        this.logger.warn(`Error in achievement evaluation cycle ${i + 1}:`, error);
+      }
+    }
+    return ran;
   }
 }

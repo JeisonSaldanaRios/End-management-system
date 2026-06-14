@@ -279,8 +279,7 @@ export class TemporalAutomationService {
 
     for (const transfer of dueDeparture) {
       try {
-        await this.transferService.updateTransfer(transfer.id, {
-          status: 'IN_TRANSIT',
+        await this.transferService.executeAutomatedTransfer(transfer.id, 'IN_TRANSIT', {
           actualDepartureDate: now,
         });
       } catch (error) {
@@ -297,8 +296,7 @@ export class TemporalAutomationService {
 
     for (const transfer of dueArrival) {
       try {
-        await this.transferService.updateTransfer(transfer.id, {
-          status: 'COMPLETED',
+        await this.transferService.executeAutomatedTransfer(transfer.id, 'COMPLETED', {
           actualArrivalDate: now,
         });
       } catch (error) {
@@ -314,8 +312,7 @@ export class TemporalAutomationService {
 
     for (const transfer of skippedToArrival) {
       try {
-        await this.transferService.updateTransfer(transfer.id, {
-          status: 'COMPLETED',
+        await this.transferService.executeAutomatedTransfer(transfer.id, 'COMPLETED', {
           actualDepartureDate: transfer.plannedDepartureDate ?? now,
           actualArrivalDate: now,
         });
@@ -329,6 +326,7 @@ export class TemporalAutomationService {
 
   private async notifyTransferFailure(transferId: number, message: string): Promise<void> {
     try {
+      if (!this.transferRepo) return;
       const rows = (await this.transferRepo.query(
         `SELECT r.origin_camp_id AS origin, r.destination_camp_id AS destination
          FROM public.transfer t
