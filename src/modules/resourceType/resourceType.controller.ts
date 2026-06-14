@@ -59,7 +59,7 @@ export class ResourceTypeController {
     );
   }
   @Get(':id')
-  @Roles('RESOURCE_MANAGEMENT')
+  @Roles('RESOURCE_MANAGEMENT', 'TRAVEL_MANAGER', 'SYSTEM_ADMIN')
   @ApiOperation({ summary: 'Get Resource Type by id' })
   @ApiParam({ name: 'id', type: Number, description: 'Resource Type id' })
   @ApiOkResponseData(ResourceTypeEntity, { description: 'Resource Type found' })
@@ -79,7 +79,7 @@ export class ResourceTypeController {
     return { success: true, data: resourceType };
   }
   @Get()
-  @Roles('RESOURCE_MANAGEMENT')
+  @Roles('RESOURCE_MANAGEMENT', 'TRAVEL_MANAGER', 'SYSTEM_ADMIN')
   @ApiOperation({ summary: 'List Resource Type' })
   @ApiOkResponseList(ResourceTypeEntity, { description: 'Resource Type list' })
   @ApiBadRequestResponse({ description: 'Invalid query parameters' })

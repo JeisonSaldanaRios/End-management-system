@@ -78,7 +78,10 @@ export class AdmissionRequestService {
     this.repository = repository;
   }
 
-  async createRequest(data: CreateAdmissionRequestDTO): Promise<AdmissionRequest> {
+  async createRequest(
+    data: CreateAdmissionRequestDTO,
+    file?: Express.Multer.File,
+  ): Promise<AdmissionRequest> {
     await assertEntityExists(this.dataSource, CampEntity, data.campId, 'Camp');
 
     const existingRequest = await this.repository.findByEmailAndCamp(data.email, data.campId);
@@ -87,10 +90,27 @@ export class AdmissionRequestService {
       throw new Error('Ya existe una solicitud con este correo para este campamento');
     }
 
+    const userRepo = this.dataSource.getRepository(UserEntity);
+    const existingUser = await userRepo.findOne({
+      where: {
+        email: data.email,
+        campId: data.campId,
+      },
+    });
+
+    if (existingUser) {
+      throw new Error('Ya existe un usuario registrado con este correo en este campamento');
+    }
+
+    if (file) {
+      const uploadedUrl = await this.storageService.uploadImage(file, 'admission-photos');
+      data.photoUrl = uploadedUrl;
+    }
+
     const normalizedData = this.normalizeAiFieldsForCreate(data);
     const createdRequest = await this.repository.create(normalizedData);
     let requestToReturn = createdRequest;
-    await this.notifyInitialAdmissionRequest(createdRequest);
+    let initialEmailSent = false;
 
     try {
       const features = buildAdmissionFeatures(normalizedData);
@@ -161,6 +181,9 @@ export class AdmissionRequestService {
       } else if (autoRejected) {
         updateData.rejectionReason = `Rechazado automáticamente por la IA. Motivo: ${aiExplain.explanation?.admissionReason || 'Puntaje de confianza muy bajo'}`;
         updateData.reviewDate = this.systemTimeService.now();
+        if (await this.deleteRejectedAdmissionPhoto(createdRequest)) {
+          updateData.photoUrl = null;
+        }
       }
 
       const updatedRequest = await this.repository.update(
@@ -187,10 +210,15 @@ export class AdmissionRequestService {
       }
 
       if (autoApproved) {
+        initialEmailSent = true;
         await this.notifyAdminReviewResult(updatedRequest, true, createdAccess);
       } else if (autoRejected) {
+        await this.notifyInitialAdmissionRequest(createdRequest);
+        initialEmailSent = true;
         await this.notifyAdminReviewResult(updatedRequest, false, null);
       } else {
+        await this.notifyInitialAdmissionRequest(createdRequest);
+        initialEmailSent = true;
         await this.notifyAiReviewResult(updatedRequest, {
           aiDecision: aiExplain.prediction,
           suggestedRole: aiExplain.roleAssignment.suggestedRole,
@@ -202,6 +230,11 @@ export class AdmissionRequestService {
         });
       }
     } catch (error) {
+      if (!initialEmailSent) {
+        await this.notifyInitialAdmissionRequest(createdRequest).catch((err) => {
+          this.logger.warn(`Failed to send initial email fallback: ${err instanceof Error ? err.message : 'unknown error'}`);
+        });
+      }
       this.logger.warn(
         `AI auto-review failed for admission request ${createdRequest.id} (camp ${createdRequest.campId}): ${error instanceof Error ? error.message : 'unknown error'
         }`,
@@ -280,6 +313,17 @@ export class AdmissionRequestService {
       );
       if (requestWithEmail && requestWithEmail.id !== existingRequest.id) {
         throw new Error('Ya existe otra solicitud con este correo para este campamento');
+      }
+
+      const userRepo = this.dataSource.getRepository(UserEntity);
+      const existingUser = await userRepo.findOne({
+        where: {
+          email: data.email ?? existingRequest.email,
+          campId: targetCampId,
+        },
+      });
+      if (existingUser) {
+        throw new Error('Ya existe un usuario registrado con este correo en este campamento');
       }
     }
 
@@ -404,6 +448,18 @@ export class AdmissionRequestService {
           'Esta persona ya fue aprobada en otro campamento y no puede ser aprobada nuevamente',
         );
       }
+
+      const userRepo = this.dataSource.getRepository(UserEntity);
+      const existingUser = await userRepo.findOne({
+        where: {
+          email: request.email,
+          campId: request.campId,
+        },
+      });
+
+      if (existingUser && existingUser.requestId !== request.id) {
+        throw new Error('Ya existe un usuario registrado con este correo en este campamento');
+      }
     }
 
     const assignedOccupationIdOnApproval = approved ? (finalOccupationId ?? null) : null;
@@ -443,6 +499,10 @@ export class AdmissionRequestService {
       );
     }
 
+    const rejectedPhotoDeleted = !approved
+      ? await this.deleteRejectedAdmissionPhoto(request)
+      : false;
+
     const updateData: UpdateAdmissionRequestDTO = {
       reviewedBy: adminUserId,
       reviewDate: this.systemTimeService.now(),
@@ -453,6 +513,7 @@ export class AdmissionRequestService {
           ? assignedOccupationIdOnApproval !== request.suggestedOccupationId
           : request.occupationModified,
       rejectionReason: approved ? null : rejectionReason || 'Solicitud rechazada',
+      ...(!approved && rejectedPhotoDeleted ? { photoUrl: null } : {}),
     };
 
     const updatedRequest = await this.repository.update(id, updateData);
@@ -528,6 +589,21 @@ export class AdmissionRequestService {
     }
 
     throw new Error(`Prediccion de admision invalida para el reporte de IA: ${prediction}`);
+  }
+
+  private async deleteRejectedAdmissionPhoto(request: AdmissionRequest): Promise<boolean> {
+    if (!request.photoUrl) return false;
+
+    try {
+      await this.storageService.deleteImage(request.photoUrl);
+      return true;
+    } catch (error) {
+      this.logger.warn(
+        `Failed to delete rejected admission photo for request ${request.id}: ${error instanceof Error ? error.message : 'unknown error'
+        }`,
+      );
+      return false;
+    }
   }
 
   private normalizeAiFieldsForUpdate(
@@ -821,9 +897,15 @@ export class AdmissionRequestService {
       },
     });
 
-    const person =
-      existingPerson ??
-      (await personRepo.save(
+    let person = existingPerson;
+
+    if (person) {
+      if (!person.imageUrl && request.photoUrl) {
+        person.imageUrl = request.photoUrl;
+        person = await personRepo.save(person);
+      }
+    } else {
+      person = await personRepo.save(
         personRepo.create({
           admissionRequestId: request.id,
           name: request.name,
@@ -840,7 +922,8 @@ export class AdmissionRequestService {
           campId: request.campId,
           occupationId: assignedOccupationId,
         }),
-      ));
+      );
+    }
 
     const role = assignedRole;
 

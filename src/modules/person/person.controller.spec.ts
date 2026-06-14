@@ -87,11 +87,15 @@ describe('PersonController', () => {
       expect(result.pagination.total).toBe(0);
     });
 
-    it('should throw BadRequestException if campId mismatch', async () => {
-      await expect(
-        controller.getAll('2', undefined, undefined, undefined, undefined, mockRequest),
-      ).rejects.toThrow('You cannot query persons from another camp');
-    });
+  it('should throw BadRequestException if campId mismatch', async () => {
+  const nonAdminRequest = {
+    user: { userId: 1, campId: 1, rol: 'RESOURCE_MANAGEMENT' },
+  } as unknown as Request;
+
+  await expect(
+    controller.getAll('2', undefined, undefined, undefined, undefined, nonAdminRequest),
+  ).rejects.toThrow('You cannot query persons from another camp');
+});
   });
 
   describe('update', () => {
