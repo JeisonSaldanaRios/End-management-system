@@ -28,6 +28,7 @@ import { ApiOkResponseData, ApiOkResponseMessage } from '../common/swagger/api-r
 import { ForgotPasswordDto, LoginDto, LoginResponseDataDto, ResetPasswordDto } from './dto';
 import type { JwtPayload } from './auth.model';
 import { AuthService } from './auth.service';
+import { getAuthCookieOptions } from './auth-cookie.options';
 
 @Controller('auth')
 @ApiTags('Auth')
@@ -49,11 +50,7 @@ export class AuthController {
   async login(@Body() body: LoginDto, @Req() req: Request, @Res({ passthrough: true }) res: Response) {
     const data = await this.service.login(body, req.ip ?? 'unknown');
     
-    res.cookie('auth_token', data.token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
-    });
+    res.cookie('auth_token', data.token, getAuthCookieOptions());
 
     const { token, ...userData } = data;
     return { success: true, data: userData };
@@ -76,11 +73,7 @@ export class AuthController {
 
     await this.service.logout(token, req.ip ?? 'unknown');
     
-    res.clearCookie('auth_token', {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
-    });
+    res.clearCookie('auth_token', getAuthCookieOptions());
     
     return { success: true, message: 'Logged out successfully' };
   }

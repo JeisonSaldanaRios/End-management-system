@@ -92,7 +92,11 @@ describe('AuthGuard', () => {
     await expect(guard.canActivate(makeContext(req, res))).resolves.toBe(true);
 
     expect(authService.rotateSessionToken).toHaveBeenCalledWith('old-token', payload);
-    expect(res.cookie).toHaveBeenCalledWith('auth_token', 'new-token', expect.any(Object));
+    expect(res.cookie).toHaveBeenCalledWith(
+      'auth_token',
+      'new-token',
+      expect.objectContaining({ path: '/' }),
+    );
     expect(req.refreshedToken).toBe('new-token');
   });
 
