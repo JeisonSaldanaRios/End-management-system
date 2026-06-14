@@ -26,6 +26,7 @@ export class SystemTimeService implements OnModuleInit {
   }
 
   private async loadOffset(): Promise<void> {
+    if (!this.systemTimeRepo) return;
     try {
       let record = await this.systemTimeRepo.findOne({ where: { id: 1 } });
       if (!record) {
@@ -35,8 +36,9 @@ export class SystemTimeService implements OnModuleInit {
       this.offsetMilliseconds = record.offsetMilliseconds;
     } catch (error) {
       // In case table doesn't exist yet during bootstrap before migrations run
+      const errorMessage = error instanceof Error ? error.message : String(error);
       console.warn(
-        `Could not load system time offset from database. Using default (0 ms). Error: ${error.message}`,
+        `Could not load system time offset from database. Using default (0 ms). Error: ${errorMessage}`,
       );
     }
   }
@@ -50,7 +52,8 @@ export class SystemTimeService implements OnModuleInit {
         lastServerTime: this.now(),
       });
     } catch (error) {
-      console.error(`Error saving system time offset to database: ${error.message}`);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.error(`Error saving system time offset to database: ${errorMessage}`);
     }
   }
 
