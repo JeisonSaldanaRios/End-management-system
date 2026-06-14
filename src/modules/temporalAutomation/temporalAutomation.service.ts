@@ -274,102 +274,87 @@ export class TemporalAutomationService {
     const now = this.systemTimeService.now();
     if (!this.transferService || !this.transferRepo) return;
 
-    const dueDepartureTransfers = await this.transferRepo.find({
-      where: {
-        status: 'PENDING_DEPARTURE',
-        plannedDepartureDate: LessThanOrEqual(now),
-      },
-      order: {
-        plannedDepartureDate: 'ASC',
-        id: 'ASC',
-      },
+    const dueDeparture = await this.transferRepo.find({
+      where: { status: 'PENDING_DEPARTURE', plannedDepartureDate: LessThanOrEqual(now) },
+      order: { plannedDepartureDate: 'ASC', id: 'ASC' },
     });
 
-    for (const transfer of dueDepartureTransfers) {
+    for (const transfer of dueDeparture) {
       try {
-        await this.transferService.updateTransfer(transfer.id, {
-          status: 'IN_TRANSIT',
+        await this.transferService.executeAutomatedTransfer(transfer.id, 'IN_TRANSIT', {
           actualDepartureDate: now,
         });
       } catch (error) {
         const message = error instanceof Error ? error.message : 'unknown error';
-        this.logger.warn(
-          `No se pudo ejecutar automaticamente el traslado ${transfer.id}: ${message}. El traslado permanece en PENDING_DEPARTURE para revision manual.`,
-        );
-        try {
-          const rows = (await this.transferRepo.query(
-            `SELECT r.origin_camp_id AS origin, r.destination_camp_id AS destination
-             FROM public.transfer t
-             JOIN public.intercamp_request r ON r.id = t.request_id
-             WHERE t.id = $1 LIMIT 1`,
-            [transfer.id],
-          )) as Array<{ origin: number; destination: number }>;
-
-          const originCampId = rows[0]?.origin ?? null;
-          const destinationCampId = rows[0]?.destination ?? null;
-
-          const notif: {
-            type: NotificationType;
-            title: string;
-            message: string;
-            sourceType: string;
-            sourceId: number;
-          } = {
-            type: 'TRANSFER_EXECUTION_FAILED',
-            title: 'Traslado requiere atención manual',
-            message: `El traslado #${transfer.id} no pudo ejecutarse automaticamente y requiere revision manual: ${message}`,
-            sourceType: 'transfer',
-            sourceId: transfer.id,
-          };
-
-          if (originCampId !== null) {
-            await this.notificationService.notifyCampRoles(
-              originCampId,
-              ['SYSTEM_ADMIN', 'RESOURCE_MANAGEMENT', 'TRAVEL_MANAGER'],
-              notif,
-            );
-          }
-
-          if (destinationCampId !== null) {
-            await this.notificationService.notifyCampRoles(
-              destinationCampId,
-              ['SYSTEM_ADMIN', 'RESOURCE_MANAGEMENT', 'TRAVEL_MANAGER'],
-              notif,
-            );
-          }
-        } catch (notifyErr) {
-          this.logger.warn(
-            `Error al notificar fracaso de ejecucion para traslado ${transfer.id}: ${
-              notifyErr instanceof Error ? notifyErr.message : 'unknown error'
-            }`,
-          );
-        }
+        this.logger.warn(`Traslado ${transfer.id} no pudo pasar a IN_TRANSIT: ${message}`);
+        await this.notifyTransferFailure(transfer.id, message);
       }
     }
 
-    const dueArrivalTransfers = await this.transferRepo.find({
-      where: {
-        status: 'IN_TRANSIT',
-        plannedArrivalDate: LessThanOrEqual(now),
-      },
-      order: {
-        plannedArrivalDate: 'ASC',
-        id: 'ASC',
-      },
+    const dueArrival = await this.transferRepo.find({
+      where: { status: 'IN_TRANSIT', plannedArrivalDate: LessThanOrEqual(now) },
+      order: { plannedArrivalDate: 'ASC', id: 'ASC' },
     });
 
-    for (const transfer of dueArrivalTransfers) {
+    for (const transfer of dueArrival) {
       try {
-        await this.transferService.updateTransfer(transfer.id, {
-          status: 'COMPLETED',
+        await this.transferService.executeAutomatedTransfer(transfer.id, 'COMPLETED', {
           actualArrivalDate: now,
         });
       } catch (error) {
         const message = error instanceof Error ? error.message : 'unknown error';
-        this.logger.warn(
-          `No se pudo completar automaticamente el traslado ${transfer.id}: ${message}`,
+        this.logger.warn(`Traslado ${transfer.id} no pudo completarse: ${message}`);
+      }
+    }
+
+    const skippedToArrival = await this.transferRepo.find({
+      where: { status: 'PENDING_DEPARTURE', plannedArrivalDate: LessThanOrEqual(now) },
+      order: { plannedArrivalDate: 'ASC', id: 'ASC' },
+    });
+
+    for (const transfer of skippedToArrival) {
+      try {
+        await this.transferService.executeAutomatedTransfer(transfer.id, 'COMPLETED', {
+          actualDepartureDate: transfer.plannedDepartureDate ?? now,
+          actualArrivalDate: now,
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'unknown error';
+        this.logger.warn(`Traslado ${transfer.id} no pudo completarse (saltando IN_TRANSIT): ${message}`);
+        await this.notifyTransferFailure(transfer.id, message);
+      }
+    }
+  }
+
+  private async notifyTransferFailure(transferId: number, message: string): Promise<void> {
+    try {
+      if (!this.transferRepo) return;
+      const rows = (await this.transferRepo.query(
+        `SELECT r.origin_camp_id AS origin, r.destination_camp_id AS destination
+         FROM public.transfer t
+         JOIN public.intercamp_request r ON r.id = t.request_id
+         WHERE t.id = $1 LIMIT 1`,
+        [transferId],
+      )) as Array<{ origin: number; destination: number }>;
+
+      const notif: { type: NotificationType; title: string; message: string; sourceType: string; sourceId: number } = {
+        type: 'TRANSFER_EXECUTION_FAILED',
+        title: 'Traslado requiere atencion manual',
+        message: `El traslado #${transferId} no pudo ejecutarse automaticamente: ${message}`,
+        sourceType: 'transfer',
+        sourceId: transferId,
+      };
+
+      const camps = [rows[0]?.origin, rows[0]?.destination].filter((c): c is number => c != null);
+      for (const campId of camps) {
+        await this.notificationService.notifyCampRoles(
+          campId,
+          ['SYSTEM_ADMIN', 'RESOURCE_MANAGEMENT', 'TRAVEL_MANAGER'],
+          notif,
         );
       }
+    } catch {
+      this.logger.warn(`No se pudo notificar fallo de traslado ${transferId}`);
     }
   }
 

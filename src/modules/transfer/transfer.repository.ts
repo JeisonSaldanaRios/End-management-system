@@ -384,12 +384,13 @@ export class TransferRepository {
     transferId: number,
     resourceTypeId: number,
     amount: string,
+    recordedBy: number,
   ): Promise<void> {
     await this.repo.query(
       `INSERT INTO public.delivered_transfer_resource
-         (transfer_id, resource_type_id, sent_amount, received_amount, record_date)
-       VALUES ($1, $2, $3, $3, NOW())`,
-      [transferId, resourceTypeId, amount],
+         (transfer_id, resource_type_id, sent_amount, received_amount, recorded_by, record_date)
+       VALUES ($1, $2, $3, $3, $4, NOW())`,
+      [transferId, resourceTypeId, amount, recordedBy],
     );
   }
 
@@ -398,12 +399,13 @@ export class TransferRepository {
     transferId: number,
     resourceTypeId: number,
     amount: string,
+    recordedBy: number,
   ): Promise<void> {
     await manager.query(
       `INSERT INTO public.delivered_transfer_resource
-         (transfer_id, resource_type_id, sent_amount, received_amount, record_date)
-       VALUES ($1, $2, $3, $3, NOW())`,
-      [transferId, resourceTypeId, amount],
+         (transfer_id, resource_type_id, sent_amount, received_amount, recorded_by, record_date)
+       VALUES ($1, $2, $3, $3, $4, NOW())`,
+      [transferId, resourceTypeId, amount, recordedBy],
     );
   }
 

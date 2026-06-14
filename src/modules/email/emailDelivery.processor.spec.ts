@@ -2,12 +2,14 @@ import { EmailDeliveryProcessor } from './emailDelivery.processor';
 import { EmailOutboxService } from './emailOutbox.service';
 import { EmailTemplateService } from './emailTemplate.service';
 import { SmtpEmailProvider } from './smtpEmail.provider';
+import { SystemTimeService } from '../systemTime/systemTime.service';
 
 describe('EmailDeliveryProcessor', () => {
   let processor: EmailDeliveryProcessor;
   let outboxService: jest.Mocked<EmailOutboxService>;
   let templateService: jest.Mocked<EmailTemplateService>;
   let smtpEmailProvider: jest.Mocked<SmtpEmailProvider>;
+  let systemTimeService: jest.Mocked<SystemTimeService>;
 
   beforeEach(() => {
     outboxService = {
@@ -24,10 +26,15 @@ describe('EmailDeliveryProcessor', () => {
       sendMail: jest.fn(),
     } as any;
 
+    systemTimeService = {
+      now: jest.fn().mockReturnValue(new Date()),
+    } as any;
+
     processor = new EmailDeliveryProcessor(
       outboxService,
       templateService,
       smtpEmailProvider,
+      systemTimeService,
     );
 
     // Reset env vars

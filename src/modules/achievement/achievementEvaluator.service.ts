@@ -12,6 +12,7 @@ import { IntercampRequestEntity } from '../intercampRequest/intercampRequest.ent
 import { InventoryAlertEntity } from '../inventoryAlert/inventoryAlert.entity';
 import { InventoryMovementEntity } from '../inventoryMovement/inventoryMovement.entity';
 import { NotificationEntity } from '../notification/notification.entity';
+import { SystemTimeService } from '../systemTime/systemTime.service';
 
 @Injectable()
 export class AchievementEvaluatorService {
@@ -34,6 +35,7 @@ export class AchievementEvaluatorService {
     private readonly inventoryMovementRepo: Repository<InventoryMovementEntity>,
     @InjectRepository(NotificationEntity)
     private readonly notificationRepo: Repository<NotificationEntity>,
+    private readonly systemTimeService: SystemTimeService,
   ) {}
 
   @Cron(CronExpression.EVERY_10_MINUTES)
@@ -77,7 +79,7 @@ export class AchievementEvaluatorService {
       await this.campAchievementService.createCampAchievement({
         campId,
         achievementId: achievement.id,
-        unlockedAt: new Date(),
+        unlockedAt: this.systemTimeService.now(),
         progressSnapshot: metricValue,
         unlockContext: `Metric ${achievement.metricKey} reached ${metricValue} (target: ${achievement.targetValue})`,
       });
@@ -148,7 +150,7 @@ export class AchievementEvaluatorService {
   }
 
   private async getMetricZeroInjuredDays(campId: number, days: number): Promise<number> {
-    const startDate = new Date();
+    const startDate = this.systemTimeService.now();
     startDate.setDate(startDate.getDate() - days);
 
     const injuredHistory = await this.dataSource.query(
@@ -168,7 +170,7 @@ export class AchievementEvaluatorService {
   }
 
   private async getMetricExpeditionsSuccessRate(campId: number, days: number): Promise<number> {
-    const startDate = new Date();
+    const startDate = this.systemTimeService.now();
     startDate.setDate(startDate.getDate() - days);
 
     const stats = await this.expeditionRepo
@@ -193,7 +195,7 @@ export class AchievementEvaluatorService {
     hours: number,
     windowDays: number,
   ): Promise<number> {
-    const startDate = new Date();
+    const startDate = this.systemTimeService.now();
     startDate.setDate(startDate.getDate() - windowDays);
 
     const rows = await this.intercampRepo
@@ -215,7 +217,7 @@ export class AchievementEvaluatorService {
   }
 
   private async getMetricNoCriticalAlertsDays(campId: number, days: number): Promise<number> {
-    const startDate = new Date();
+    const startDate = this.systemTimeService.now();
     startDate.setDate(startDate.getDate() - days);
 
     const count = await this.inventoryAlertRepo.count({
@@ -228,7 +230,7 @@ export class AchievementEvaluatorService {
   }
 
   private async getMetricInboundMovements(campId: number, days: number): Promise<number> {
-    const startDate = new Date();
+    const startDate = this.systemTimeService.now();
     startDate.setDate(startDate.getDate() - days);
 
     return await this.inventoryMovementRepo
@@ -241,7 +243,7 @@ export class AchievementEvaluatorService {
   }
 
   private async getMetricNoCriticalNotificationsDays(campId: number, days: number): Promise<number> {
-    const startDate = new Date();
+    const startDate = this.systemTimeService.now();
     startDate.setDate(startDate.getDate() - days);
 
     const count = await this.notificationRepo
@@ -261,7 +263,7 @@ export class AchievementEvaluatorService {
     });
 
     const start = lastCritical ? lastCritical.alertDate : new Date(2020, 0, 1);
-    const diff = new Date().getTime() - start.getTime();
+    const diff = this.systemTimeService.now().getTime() - start.getTime();
     return Math.floor(diff / (1000 * 60 * 60 * 24));
   }
 }

@@ -1,10 +1,12 @@
 import { OccupationCoverageScheduler } from './occupationCoverage.scheduler';
+import { SystemTimeService } from '../systemTime/systemTime.service';
 
 describe('OccupationCoverageScheduler', () => {
   let scheduler: OccupationCoverageScheduler;
   let coverageService: any;
   let dataSource: any;
   let notificationService: any;
+  let systemTimeService: any;
 
   beforeEach(() => {
     coverageService = {
@@ -22,7 +24,15 @@ describe('OccupationCoverageScheduler', () => {
     notificationService = {
       notifyCampRoles: jest.fn(),
     };
-    scheduler = new OccupationCoverageScheduler(coverageService, dataSource, notificationService);
+    systemTimeService = {
+      now: jest.fn().mockReturnValue(new Date()),
+    } as jest.Mocked<SystemTimeService>;
+    scheduler = new OccupationCoverageScheduler(
+      coverageService,
+      dataSource,
+      notificationService,
+      systemTimeService,
+    );
   });
 
   describe('checkCriticalOccupations', () => {

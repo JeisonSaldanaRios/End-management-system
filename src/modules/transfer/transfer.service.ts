@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
+import { Injectable, BadRequestException, Logger, NotFoundException } from '@nestjs/common';
 import { DataSource, EntityManager } from 'typeorm';
 
 import { assertEntityExists } from '../../common/validation/assert-exists';
@@ -6,6 +6,7 @@ import { CampEntity } from '../camp/camp.entity';
 import { InventoryMovementService } from '../inventoryMovement/inventoryMovement.service';
 import { IntercampRequestEntity } from '../intercampRequest/intercampRequest.entity';
 import { NotificationService } from '../notification/notification.service';
+import { SystemTimeService } from '../systemTime/systemTime.service';
 
 import { TransferRepository } from './transfer.repository';
 import type {
@@ -18,11 +19,14 @@ import type {
 
 @Injectable()
 export class TransferService {
+  private readonly logger = new Logger(TransferService.name);
+
   constructor(
     private readonly repository: TransferRepository,
     private readonly notificationService: NotificationService,
     private readonly inventoryMovementService: InventoryMovementService,
     private readonly dataSource: DataSource,
+    private readonly systemTimeService: SystemTimeService,
   ) {}
 
   private roundToTwo(value: number): string {
@@ -205,6 +209,7 @@ export class TransferService {
     manager: EntityManager,
     transferId: number,
     requestId: number,
+    actorUserId: number,
   ): Promise<void> {
     const existing = await this.repository.findDeliveredResourcesByTransferIdWithManager(
       manager,
@@ -232,6 +237,7 @@ export class TransferService {
           transferId,
           row.resourceTypeId,
           row.amount,
+          actorUserId,
         );
       }
     }
@@ -243,7 +249,7 @@ export class TransferService {
     requestId: number,
     actorUserId: number,
   ): Promise<void> {
-    await this.ensureDeliveredResourcesFromRequest(manager, transferId, requestId);
+    await this.ensureDeliveredResourcesFromRequest(manager, transferId, requestId, actorUserId);
 
     const alreadyApplied = await this.repository.countAppliedTransferSentMovementsWithManager(
       manager,
@@ -293,7 +299,7 @@ export class TransferService {
     requestId: number,
     actorUserId: number,
   ): Promise<void> {
-    await this.ensureDeliveredResourcesFromRequest(manager, transferId, requestId);
+    await this.ensureDeliveredResourcesFromRequest(manager, transferId, requestId, actorUserId);
 
     const alreadyApplied = await this.repository.countAppliedTransferReceivedMovementsWithManager(
       manager,
@@ -450,7 +456,7 @@ export class TransferService {
     if (updateData.status === 'IN_TRANSIT') {
       await this.assertTransferCanMove(existing);
       await this.assertRationsAvailable(existing);
-      updateData.actualDepartureDate = updateData.actualDepartureDate ?? new Date();
+      updateData.actualDepartureDate = updateData.actualDepartureDate ?? this.systemTimeService.now();
     }
 
     if (updateData.status === 'COMPLETED') {
@@ -478,8 +484,8 @@ export class TransferService {
       updateData.departureApprovedBy = resolvedDepartureApprovedBy;
       updateData.arrivalApprovedBy = resolvedArrivalApprovedBy;
       updateData.actualDepartureDate =
-        updateData.actualDepartureDate ?? existing.actualDepartureDate ?? new Date();
-      updateData.actualArrivalDate = updateData.actualArrivalDate ?? new Date();
+        updateData.actualDepartureDate ?? existing.actualDepartureDate ?? this.systemTimeService.now();
+      updateData.actualArrivalDate = updateData.actualArrivalDate ?? this.systemTimeService.now();
     }
 
     if (updateData.requestId !== undefined && updateData.requestId !== existing.requestId) {
@@ -516,30 +522,25 @@ export class TransferService {
           await this.repository.setManifestInTransitWithManager(
             manager,
             updated.id,
-            updated.actualDepartureDate ?? new Date(),
+            updated.actualDepartureDate ?? this.systemTimeService.now(),
           );
           await this.applyTransferRations(manager, updated, actorUserId);
           await this.applyTransferSentInventory(manager, updated.id, updated.requestId, actorUserId);
         }
 
         if (updated.status === 'COMPLETED') {
-          if (existing.status === 'PENDING_DEPARTURE') {
-            await this.repository.setManifestInTransitWithManager(
-              manager,
-              updated.id,
-              updated.actualDepartureDate ?? new Date(),
-            );
+          const skipFromPending = existing.status === 'PENDING_DEPARTURE';
+          const departureDate = updated.actualDepartureDate ?? existing.plannedDepartureDate ?? this.systemTimeService.now();
+          const arrivalDate = updated.actualArrivalDate ?? this.systemTimeService.now();
+
+          if (skipFromPending) {
+            await this.repository.setManifestInTransitWithManager(manager, updated.id, departureDate);
             await this.applyTransferRations(manager, updated, actorUserId);
             await this.applyTransferSentInventory(manager, updated.id, updated.requestId, actorUserId);
           }
 
           await this.applyTransferReceivedInventory(manager, updated.id, updated.requestId, actorUserId);
-          await this.repository.completeManifestWithManager(
-            manager,
-            updated.id,
-            updated.requestId,
-            updated.actualArrivalDate ?? new Date(),
-          );
+          await this.repository.completeManifestWithManager(manager, updated.id, updated.requestId, arrivalDate);
         }
 
         if (updated.status === 'CANCELED') {
@@ -820,4 +821,179 @@ export class TransferService {
       throw new BadRequestException('You can only access transfers involving your camp');
     }
   }
+
+  /**
+   * Executes a transfer status transition automatically (bypassing manual validations
+   * such as transport staff check and rations availability). Used by temporal automation
+   * when the planned departure/arrival date is reached after advancing system time.
+   *
+   * Phase 1 — status update — is always committed.
+   * Phase 2 — inventory/manifest operations — run best-effort; errors are logged but
+   * do NOT roll back the status change.
+   */
+  async executeAutomatedTransfer(
+    id: number,
+    newStatus: 'IN_TRANSIT' | 'COMPLETED',
+    dates: {
+      actualDepartureDate?: Date;
+      actualArrivalDate?: Date;
+    },
+  ): Promise<Transfer | null> {
+    const existing = await this.repository.findById(id);
+    if (!existing) return null;
+
+    if (existing.status === 'COMPLETED' || existing.status === 'CANCELED') {
+      return existing;
+    }
+
+    const now = this.systemTimeService.now();
+    const scope = await this.resolveRequestScope(existing.requestId);
+    const actorUserId = scope.respondedBy ?? scope.createdBy;
+
+    const updateData: UpdateTransferDTO = { status: newStatus };
+
+    if (newStatus === 'IN_TRANSIT') {
+      updateData.actualDepartureDate = dates.actualDepartureDate ?? now;
+    }
+
+    if (newStatus === 'COMPLETED') {
+      updateData.departureApprovedBy = existing.departureApprovedBy ?? actorUserId;
+      updateData.arrivalApprovedBy = existing.arrivalApprovedBy ?? actorUserId;
+      updateData.actualDepartureDate =
+        dates.actualDepartureDate ??
+        existing.actualDepartureDate ??
+        existing.plannedDepartureDate ??
+        now;
+      updateData.actualArrivalDate = dates.actualArrivalDate ?? now;
+    }
+
+    // ── Phase 1: Persist status change unconditionally ────────────────────────
+    const updated = await this.dataSource.transaction(async (manager) => {
+      return await this.repository.updateWithManager(manager, id, updateData);
+    });
+
+    if (!updated) return null;
+
+    if (updated.status === existing.status) {
+      return updated;
+    }
+
+    // ── Phase 2: Apply inventory / manifest (best-effort) ────────────────────
+    const resolvedActorUserId =
+      updated.arrivalApprovedBy ?? updated.departureApprovedBy ?? actorUserId;
+
+    // ── Phase 2: Apply inventory / manifest (best-effort, granular) ─────────
+    if (updated.status === 'IN_TRANSIT') {
+      // 2a. Mark manifest as in transit
+      try {
+        await this.dataSource.transaction(async (manager) => {
+          await this.repository.setManifestInTransitWithManager(
+            manager,
+            updated.id,
+            updated.actualDepartureDate ?? now,
+          );
+          await this.applyTransferRationsSafe(manager, updated, resolvedActorUserId);
+          await this.applyTransferSentInventory(manager, updated.id, updated.requestId, resolvedActorUserId);
+          await this.createTransferHistoryEntry(manager, updated.id, existing.status, updated.status, resolvedActorUserId);
+        });
+      } catch (err) {
+        this.logger.warn(
+          `[executeAutomated] Transfer #${id} IN_TRANSIT secondary ops failed: ${err instanceof Error ? err.message : String(err)}\n${err instanceof Error ? err.stack : ''}`,
+        );
+      }
+    }
+
+    if (updated.status === 'COMPLETED') {
+      const skipFromPending = existing.status === 'PENDING_DEPARTURE';
+      const departureDate = updated.actualDepartureDate ?? (existing as Transfer).plannedDepartureDate ?? now;
+      const arrivalDate = updated.actualArrivalDate ?? now;
+
+      // 2b. Departure side (only if skipping from PENDING_DEPARTURE)
+      if (skipFromPending) {
+        try {
+          await this.dataSource.transaction(async (manager) => {
+            await this.repository.setManifestInTransitWithManager(manager, updated.id, departureDate);
+            await this.applyTransferRationsSafe(manager, updated, resolvedActorUserId);
+            await this.applyTransferSentInventory(manager, updated.id, updated.requestId, resolvedActorUserId);
+          });
+        } catch (err) {
+          this.logger.warn(
+            `[executeAutomated] Transfer #${id} COMPLETED departure ops failed: ${err instanceof Error ? err.message : String(err)}\n${err instanceof Error ? err.stack : ''}`,
+          );
+        }
+      }
+
+      // 2c. Arrival / complete manifest
+      try {
+        await this.dataSource.transaction(async (manager) => {
+          await this.applyTransferReceivedInventory(manager, updated.id, updated.requestId, resolvedActorUserId);
+          await this.repository.completeManifestWithManager(manager, updated.id, updated.requestId, arrivalDate);
+          await this.createTransferHistoryEntry(manager, updated.id, existing.status, updated.status, resolvedActorUserId);
+        });
+      } catch (err) {
+        this.logger.warn(
+          `[executeAutomated] Transfer #${id} COMPLETED arrival/manifest ops failed: ${err instanceof Error ? err.message : String(err)}\n${err instanceof Error ? err.stack : ''}`,
+        );
+      }
+    }
+
+    // Notifications always sent regardless of inventory result
+    const notificationType = updated.status === 'COMPLETED' ? 'TRANSFER_COMPLETED' : 'TRANSFER_PENDING';
+    const title =
+      updated.status === 'COMPLETED' ? 'Traslado completado automaticamente' : 'Traslado en transito';
+    const message = `El traslado #${updated.id} cambio automaticamente su estado a ${updated.status}.`;
+
+    void this.notificationService.notifyCampRoles(
+      scope.originCampId,
+      ['SYSTEM_ADMIN', 'RESOURCE_MANAGEMENT', 'TRAVEL_MANAGER'],
+      { type: notificationType, title, message, sourceType: 'transfer', sourceId: updated.id },
+    );
+    void this.notificationService.notifyCampRoles(
+      scope.destinationCampId,
+      ['SYSTEM_ADMIN', 'RESOURCE_MANAGEMENT', 'TRAVEL_MANAGER'],
+      { type: notificationType, title, message, sourceType: 'transfer', sourceId: updated.id },
+    );
+
+    return updated;
+  }
+
+  /**
+   * Like applyTransferRations but skips silently when rationsForTrip <= 0 or
+   * when no FOOD resource is configured, instead of throwing.
+   */
+  private async applyTransferRationsSafe(
+    manager: EntityManager,
+    transfer: Transfer,
+    actorUserId: number,
+  ): Promise<void> {
+    const alreadyApplied = await this.repository.countAppliedTransferRationMovementsWithManager(
+      manager,
+      transfer.id,
+    );
+    if (alreadyApplied > 0) return;
+
+    const refreshed = await this.repository.findById(transfer.id);
+    const rationsForTrip = this.toNumber(refreshed?.rationsForTrip ?? transfer.rationsForTrip);
+    if (rationsForTrip <= 0) return; // Nothing to apply — skip silently
+
+    const scope = await this.resolveRequestScope(transfer.requestId);
+    const supplierCampId = scope.destinationCampId;
+    const rationInventory = await this.repository.findRationInventoryCandidateWithManager(
+      manager,
+      supplierCampId,
+    );
+    if (!rationInventory) return; // No FOOD resource configured — skip silently
+
+    await this.repository.createInventoryMovementWithManager(manager, {
+      campId: supplierCampId,
+      resourceTypeId: rationInventory.resourceTypeId,
+      amount: this.roundToTwo(rationsForTrip),
+      movementType: 'DAILY_RATION',
+      sourceId: transfer.id,
+      sourceType: 'transfer_rations',
+      recordedBy: actorUserId,
+      description: `Transfer rations consumed for transfer #${transfer.id}`,
+    });
+  }
 }
+
