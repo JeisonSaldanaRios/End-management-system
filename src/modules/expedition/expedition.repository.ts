@@ -292,13 +292,13 @@ export class ExpeditionRepository {
       if (lootRows.length === 0) {
         const resourceTypes = (await queryRunner.query(
           `
-          SELECT id, category
+          SELECT id, name, unit_of_measure
           FROM resource_type
           WHERE category IN ('FOOD', 'WATER', 'MEDICAL', 'AMMUNITION')
           ORDER BY RANDOM()
           LIMIT 4
           `,
-        )) as Array<{ id: number; category: string }>;
+        )) as Array<{ id: number; name: string; unit_of_measure: string }>;
 
         for (const resourceType of resourceTypes) {
           const randomAmount = (Math.random() * 14 + 1).toFixed(2);
@@ -319,6 +319,8 @@ export class ExpeditionRepository {
 
           lootRows.push({
             resource_type_id: resourceType.id,
+            resource_type_name: resourceType.name,
+            unit: resourceType.unit_of_measure,
             total_amount: randomAmount,
           });
         }
