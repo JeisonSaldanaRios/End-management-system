@@ -880,9 +880,11 @@ export class TransferService {
     const resolvedActorUserId =
       updated.arrivalApprovedBy ?? updated.departureApprovedBy ?? actorUserId;
 
-    try {
-      await this.dataSource.transaction(async (manager) => {
-        if (updated.status === 'IN_TRANSIT') {
+    // ── Phase 2: Apply inventory / manifest (best-effort, granular) ─────────
+    if (updated.status === 'IN_TRANSIT') {
+      // 2a. Mark manifest as in transit
+      try {
+        await this.dataSource.transaction(async (manager) => {
           await this.repository.setManifestInTransitWithManager(
             manager,
             updated.id,
@@ -890,37 +892,47 @@ export class TransferService {
           );
           await this.applyTransferRationsSafe(manager, updated, resolvedActorUserId);
           await this.applyTransferSentInventory(manager, updated.id, updated.requestId, resolvedActorUserId);
-        }
+          await this.createTransferHistoryEntry(manager, updated.id, existing.status, updated.status, resolvedActorUserId);
+        });
+      } catch (err) {
+        this.logger.warn(
+          `[executeAutomated] Transfer #${id} IN_TRANSIT secondary ops failed: ${err instanceof Error ? err.message : String(err)}\n${err instanceof Error ? err.stack : ''}`,
+        );
+      }
+    }
 
-        if (updated.status === 'COMPLETED') {
-          const skipFromPending = existing.status === 'PENDING_DEPARTURE';
-          const departureDate =
-            updated.actualDepartureDate ?? existing.plannedDepartureDate ?? now;
-          const arrivalDate = updated.actualArrivalDate ?? now;
+    if (updated.status === 'COMPLETED') {
+      const skipFromPending = existing.status === 'PENDING_DEPARTURE';
+      const departureDate = updated.actualDepartureDate ?? (existing as Transfer).plannedDepartureDate ?? now;
+      const arrivalDate = updated.actualArrivalDate ?? now;
 
-          if (skipFromPending) {
+      // 2b. Departure side (only if skipping from PENDING_DEPARTURE)
+      if (skipFromPending) {
+        try {
+          await this.dataSource.transaction(async (manager) => {
             await this.repository.setManifestInTransitWithManager(manager, updated.id, departureDate);
             await this.applyTransferRationsSafe(manager, updated, resolvedActorUserId);
             await this.applyTransferSentInventory(manager, updated.id, updated.requestId, resolvedActorUserId);
-          }
+          });
+        } catch (err) {
+          this.logger.warn(
+            `[executeAutomated] Transfer #${id} COMPLETED departure ops failed: ${err instanceof Error ? err.message : String(err)}\n${err instanceof Error ? err.stack : ''}`,
+          );
+        }
+      }
 
+      // 2c. Arrival / complete manifest
+      try {
+        await this.dataSource.transaction(async (manager) => {
           await this.applyTransferReceivedInventory(manager, updated.id, updated.requestId, resolvedActorUserId);
           await this.repository.completeManifestWithManager(manager, updated.id, updated.requestId, arrivalDate);
-        }
-
-        await this.createTransferHistoryEntry(
-          manager,
-          updated.id,
-          existing.status,
-          updated.status,
-          resolvedActorUserId,
+          await this.createTransferHistoryEntry(manager, updated.id, existing.status, updated.status, resolvedActorUserId);
+        });
+      } catch (err) {
+        this.logger.warn(
+          `[executeAutomated] Transfer #${id} COMPLETED arrival/manifest ops failed: ${err instanceof Error ? err.message : String(err)}\n${err instanceof Error ? err.stack : ''}`,
         );
-      });
-    } catch (inventoryError) {
-      const msg = inventoryError instanceof Error ? inventoryError.message : String(inventoryError);
-      this.logger.warn(
-        `Transfer #${id} moved to ${newStatus} but inventory/manifest operations failed (non-blocking): ${msg}`,
-      );
+      }
     }
 
     // Notifications always sent regardless of inventory result
