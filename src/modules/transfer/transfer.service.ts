@@ -209,6 +209,7 @@ export class TransferService {
     manager: EntityManager,
     transferId: number,
     requestId: number,
+    actorUserId: number,
   ): Promise<void> {
     const existing = await this.repository.findDeliveredResourcesByTransferIdWithManager(
       manager,
@@ -236,6 +237,7 @@ export class TransferService {
           transferId,
           row.resourceTypeId,
           row.amount,
+          actorUserId,
         );
       }
     }
@@ -247,7 +249,7 @@ export class TransferService {
     requestId: number,
     actorUserId: number,
   ): Promise<void> {
-    await this.ensureDeliveredResourcesFromRequest(manager, transferId, requestId);
+    await this.ensureDeliveredResourcesFromRequest(manager, transferId, requestId, actorUserId);
 
     const alreadyApplied = await this.repository.countAppliedTransferSentMovementsWithManager(
       manager,
@@ -297,7 +299,7 @@ export class TransferService {
     requestId: number,
     actorUserId: number,
   ): Promise<void> {
-    await this.ensureDeliveredResourcesFromRequest(manager, transferId, requestId);
+    await this.ensureDeliveredResourcesFromRequest(manager, transferId, requestId, actorUserId);
 
     const alreadyApplied = await this.repository.countAppliedTransferReceivedMovementsWithManager(
       manager,
